@@ -45,6 +45,7 @@ CI runs RuboCop, Brakeman, importmap audit, application tests, and system tests 
 - Prefer plain Rails objects, Active Record models, controllers, jobs, and mailers over new abstractions until the app clearly needs them.
 - For non-trivial product or workflow changes, first describe the intended flow in clear method-level steps before implementing.
 - For early product shaping, do not force tests for every first draft. Once the behavior is confirmed, use TDD for important business flows and bug fixes: write or identify the failing test first, then make it pass.
+- Do not change production code solely to make tests easier. Prefer testing through public behavior, fixtures, fakes, or test-only stubs.
 - Do not change, weaken, or delete existing tests without explicitly confirming with the user first.
 - When code and a test disagree, assume the test is the source of truth and fix the code. If the test appears wrong, stop and ask.
 - Do not leave TODOs, placeholders, or half-implemented behavior.

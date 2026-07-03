@@ -1,6 +1,9 @@
 Rails.application.routes.draw do
   root "landing#index"
   get "/home", to: "landing#index", as: :home
+  get "/xero/connect", to: "xero_connections#new", as: :new_xero_connection
+  get "/xero/callback", to: "xero_connections#create", as: :xero_callback
+  resource :xero_connection, only: %i[show destroy]
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

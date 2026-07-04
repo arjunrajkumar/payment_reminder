@@ -1,0 +1,17 @@
+xero:
+  account: paid_jar
+  provider: xero
+  status: active
+  external_account_id: xero-tenant-123
+  external_account_name: PaidJar Xero
+  scopes:
+    - accounting.transactions.read
+    - accounting.contacts.read
+  provider_data:
+    xero_user_id: xero-user-123
+    email: arjun@example.com
+    tenant_id: xero-tenant-123
+    tenant_name: PaidJar Xero
+    token_type: Bearer
+    connections: []
+  raw_token_data: {}

@@ -5,6 +5,10 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes accounts(:paid_jar).users, users(:arjun)
   end
 
+  test "has many invoice integrations" do
+    assert_includes accounts(:paid_jar).invoice_integrations, invoice_integrations(:xero)
+  end
+
   test "requires a name" do
     account = Account.new
 

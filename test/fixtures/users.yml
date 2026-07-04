@@ -2,3 +2,4 @@ arjun:
   account: paid_jar
   name: Arjun Rajkumar
   email: arjun@example.com
+  active: true

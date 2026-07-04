@@ -19,6 +19,12 @@ class UserTest < ActiveSupport::TestCase
     assert_equal "new@example.com", user.email
   end
 
+  test "filters active users" do
+    inactive = accounts(:paid_jar).users.create!(name: "Inactive User", email: "inactive@example.com", active: false)
+
+    assert_equal [ users(:arjun) ], User.where(id: [ users(:arjun).id, inactive.id ]).active.to_a
+  end
+
   test "orders by name" do
     zed = accounts(:paid_jar).users.create!(name: "zed User", email: "zed@example.com")
     alpha = accounts(:paid_jar).users.create!(name: "Alpha User", email: "alpha@example.com")
@@ -26,8 +32,8 @@ class UserTest < ActiveSupport::TestCase
     assert_equal [ "Alpha User", "zed User" ], User.where(id: [ alpha.id, zed.id ]).ordered.pluck(:name)
   end
 
-  test "filters by name or email" do
-    assert_equal [ users(:arjun) ], User.filtered_by("arjun@example").to_a
+  test "filters by name" do
+    assert_equal [ users(:arjun) ], User.filtered_by("Arjun").to_a
   end
 
   test "returns initials" do

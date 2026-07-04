@@ -1,0 +1,14 @@
+<h1>Sign up</h1>
+
+<%= form_with model: @signup, url: signup_path, scope: "signup", data: { turbo: false } do |form| %>
+  <p>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address..." %>
+  </p>
+
+  <p>Enter your email to create an account.</p>
+
+  <button type="submit">
+    <span>Let's go</span>
+    <span>-></span>
+  </button>
+<% end %>

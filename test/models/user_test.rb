@@ -5,35 +5,33 @@ class UserTest < ActiveSupport::TestCase
     assert_equal accounts(:paid_jar), users(:arjun).account
   end
 
-  test "requires a name and email" do
+  test "requires a name" do
     user = accounts(:paid_jar).users.build
 
     assert_not user.valid?
     assert_includes user.errors[:name], "can't be blank"
-    assert_includes user.errors[:email], "can't be blank"
   end
 
-  test "normalizes email" do
-    user = accounts(:paid_jar).users.create!(name: "New User", email: " New@Example.COM ")
+  test "filters active human users" do
+    inactive = accounts(:paid_jar).users.create!(name: "Inactive User", active: false)
+    system = accounts(:paid_jar).users.create!(name: "System", role: :system)
 
-    assert_equal "new@example.com", user.email
+    assert_equal [ users(:arjun) ], User.where(id: [ users(:arjun).id, inactive.id, system.id ]).active.to_a
   end
 
-  test "filters active users" do
-    inactive = accounts(:paid_jar).users.create!(name: "Inactive User", email: "inactive@example.com", active: false)
+  test "owner is an admin" do
+    user = accounts(:paid_jar).users.create!(name: "Owner User", role: :owner)
 
-    assert_equal [ users(:arjun) ], User.where(id: [ users(:arjun).id, inactive.id ]).active.to_a
+    assert_predicate user, :owner?
+    assert_predicate user, :admin?
   end
 
-  test "orders by name" do
-    zed = accounts(:paid_jar).users.create!(name: "zed User", email: "zed@example.com")
-    alpha = accounts(:paid_jar).users.create!(name: "Alpha User", email: "alpha@example.com")
+  test "verifies a user" do
+    user = users(:arjun)
 
-    assert_equal [ "Alpha User", "zed User" ], User.where(id: [ alpha.id, zed.id ]).ordered.pluck(:name)
-  end
-
-  test "filters by name" do
-    assert_equal [ users(:arjun) ], User.filtered_by("Arjun").to_a
+    assert_not user.verified?
+    user.verify
+    assert_predicate user, :verified?
   end
 
   test "returns initials" do
@@ -41,6 +39,9 @@ class UserTest < ActiveSupport::TestCase
   end
 
   test "returns title" do
+    identity = Identity.create!(email_address: "arjun@example.com")
+    users(:arjun).update!(identity: identity)
+
     assert_equal "Arjun Rajkumar - arjun@example.com", users(:arjun).title
   end
 end

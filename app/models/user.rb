@@ -1,20 +1,34 @@
 class User < ApplicationRecord
-  belongs_to :account, inverse_of: :users
+  include User::Role
 
-  normalizes :email, with: -> { _1.strip.downcase }
+  belongs_to :account
+  belongs_to :identity, optional: true
 
-  validates :name, :email, presence: true
-  validates :email, uniqueness: { case_sensitive: false }
+  validates :name, presence: true
 
-  scope :active, -> { where(active: true) }
-  scope :ordered, -> { order("LOWER(name)") }
-  scope :filtered_by, ->(query) { where("name like ?", "%#{query}%") }
+  def deactivate
+    transaction do
+      update! active: false, identity: nil
+    end
+  end
 
   def initials
     name.to_s.scan(/\b\w/).join.upcase
   end
 
   def title
-    [ name, email ].compact_blank.join(" - ")
+    [ name, identity&.email_address ].compact_blank.join(" - ")
+  end
+
+  def setup?
+    name != identity&.email_address
+  end
+
+  def verified?
+    verified_at.present?
+  end
+
+  def verify
+    update!(verified_at: Time.current) unless verified?
   end
 end

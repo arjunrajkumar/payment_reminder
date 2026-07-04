@@ -2,6 +2,20 @@ Rails.application.routes.draw do
   root "landing#index"
   get "/home", to: "landing#index", as: :home
 
+  resource :signup, only: %i[new create] do
+    collection do
+      scope module: :signups, as: :signup do
+        resource :completion, only: %i[new create]
+      end
+    end
+  end
+
+  resource :session, only: [] do
+    scope module: :sessions do
+      resource :magic_link, only: %i[show create]
+    end
+  end
+
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.

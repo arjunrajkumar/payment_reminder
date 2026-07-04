@@ -1,0 +1,10 @@
+<% if @magic_link.for_sign_in? %>
+Please enter this 6-character verification code on the PaidJar sign-in page:
+<% else %>
+Welcome to PaidJar!
+Please enter this 6-character verification code to finish creating your account:
+<% end %>
+
+<%= @magic_link.code %>
+
+This code will work for <%= distance_of_time_in_words(MagicLink::EXPIRATION_TIME) %>.

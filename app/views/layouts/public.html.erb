@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title><%= content_for(:title) || "PaidJar" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+
+    <%= yield :head %>
+
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  </head>
+
+  <body data-platform="<%= platform.type %>">
+    <header>
+      <%= link_to "PaidJar", root_path %>
+      <%= yield :header %>
+    </header>
+
+    <% if flash.any? %>
+      <div id="flash">
+        <% flash.each do |type, message| %>
+          <p><%= message %></p>
+        <% end %>
+      </div>
+    <% end %>
+
+    <main id="main">
+      <%= yield %>
+    </main>
+
+    <footer>
+      <%= yield :footer %>
+    </footer>
+  </body>
+</html>

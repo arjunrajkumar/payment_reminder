@@ -122,7 +122,16 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     delete xero_connection_url
 
-    assert_redirected_to root_url
+    assert_redirected_to new_xero_connection_url
+    assert_equal "Connect Xero first.", flash[:alert]
+  end
+
+  test "show redirects when xero is not connected" do
+    sign_up_and_complete
+
+    get xero_connection_url
+
+    assert_redirected_to new_xero_connection_url
     assert_equal "Connect Xero first.", flash[:alert]
   end
 

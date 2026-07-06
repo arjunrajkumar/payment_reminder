@@ -48,7 +48,7 @@ class XeroConnectionsController < ApplicationController
     if accounting_integration = Current.account.accounting_integrations.xero.connected.first
       @accounting_integration = accounting_integration
     else
-      redirect_to root_path, alert: "Connect Xero first."
+      redirect_to new_xero_connection_path, alert: "Connect Xero first."
     end
   end
 

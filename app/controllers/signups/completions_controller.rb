@@ -35,7 +35,7 @@ class Signups::CompletionsController < ApplicationController
 
     def welcome_to_account
       respond_to do |format|
-        format.html { redirect_to root_path, notice: "Welcome to PaidJar." }
+        format.html { redirect_to account_settings_url(script_name: @signup.account.slug), notice: "Welcome to PaidJar." }
         format.json { head :created }
       end
     end

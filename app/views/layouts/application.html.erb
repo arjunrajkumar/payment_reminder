@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title><%= content_for(:title) || "Paid Jar" %></title>
+    <%= page_title_tag %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
@@ -22,7 +22,22 @@
     <%= javascript_importmap_tags %>
   </head>
 
-  <body>
-    <%= yield %>
+  <body data-platform="<%= platform.type %>">
+    <header>
+      <%= link_to "PaidJar", root_path %>
+      <%= yield :header %>
+    </header>
+
+    <% if flash.any? %>
+      <div id="flash">
+        <% flash.each do |type, message| %>
+          <p><%= message %></p>
+        <% end %>
+      </div>
+    <% end %>
+
+    <main id="main">
+      <%= yield %>
+    </main>
   </body>
 </html>

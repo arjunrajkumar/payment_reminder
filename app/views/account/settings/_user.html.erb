@@ -1,0 +1,23 @@
+<li data-filter-target="item" data-navigable-list-target="item" role="option">
+  <div>
+    <div>
+      <strong><%= user.name %></strong>
+      <div><%= user.identity&.email_address %></div>
+    </div>
+  </div>
+
+  <hr aria-hidden="true">
+
+  <%= form_with model: user, url: user_role_path(user), data: { controller: "form" }, method: :patch do |form| %>
+    <label for="<%= dom_id(user, :role) %>">
+      <span>Admin</span>
+      <%= form.check_box :role, { data: { action: "form#submit" }, disabled: !Current.user.can_administer?(user), checked: user.admin?, id: dom_id(user, :role) }, "admin", "member" %>
+    </label>
+  <% end %>
+
+  <%= button_to user, method: :delete,
+        disabled: !Current.user.can_administer?(user),
+        data: { turbo_confirm: "Are you sure you want to permanently remove this person from the account?" } do %>
+    <span>Remove</span>
+  <% end %>
+</li>

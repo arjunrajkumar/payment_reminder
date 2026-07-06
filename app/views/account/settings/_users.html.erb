@@ -1,0 +1,21 @@
+<section>
+  <header>
+    <h2>People on this account</h2>
+  </header>
+
+  <%= tag.div data: {
+    controller: "filter navigable-list",
+    action: "keydown->navigable-list#navigate filter:changed->navigable-list#reset",
+    navigable_list_focus_on_selection_value: true,
+    navigable_list_actionable_items_value: true
+  } do %>
+
+    <div>
+      <input placeholder="Filter..." type="search" autocorrect="off" autocomplete="off" data-1p-ignore="true" data-filter-target="input" data-action="input->filter#filter">
+
+      <ul data-filter-target="list" role="listbox">
+        <%= render partial: "account/settings/user", collection: users %>
+      </ul>
+    </div>
+  <% end %>
+</section>

@@ -2,10 +2,6 @@
 
 <p><%= link_to "Connect Xero", new_xero_connection_path %></p>
 
-<% if Current.account %>
-  <p><%= link_to "Invoices", invoices_path %></p>
-<% end %>
-
 <p>
   <%= link_to "Sign in", new_session_path %>
   or

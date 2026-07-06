@@ -6,7 +6,7 @@
   <p><%= link_to "Connect Xero", new_xero_connection_path %></p>
 <% end %>
 
-<% if @invoices.any? %>
+<% if @page.used? %>
   <table>
     <thead>
       <tr>
@@ -20,7 +20,7 @@
       </tr>
     </thead>
     <tbody>
-      <% @invoices.each do |invoice| %>
+      <% @page.records.each do |invoice| %>
         <tr>
           <td><%= invoice.number.presence || invoice.external_id %></td>
           <td><%= invoice.contact_name %></td>
@@ -33,6 +33,10 @@
       <% end %>
     </tbody>
   </table>
+
+  <% if @page.before_last? %>
+    <p><%= link_to "Load more", invoices_path(page: @page.next_param) %></p>
+  <% end %>
 <% else %>
   <p>No invoices synced yet.</p>
 <% end %>

@@ -1,6 +1,6 @@
 class InvoicesController < ApplicationController
   def index
     @xero_integration = Current.account.accounting_integrations.xero.connected.first
-    @invoices = Current.account.invoices.includes(:accounting_integration).recent
+    set_page_and_extract_portion_from Current.account.invoices.includes(:accounting_integration).recent
   end
 end

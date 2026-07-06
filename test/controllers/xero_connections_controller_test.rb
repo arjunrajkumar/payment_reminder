@@ -117,6 +117,15 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_nil integration.refresh_token
   end
 
+  test "destroy redirects when xero is not connected" do
+    sign_up_and_complete
+
+    delete xero_connection_url
+
+    assert_redirected_to root_url
+    assert_equal "Connect Xero first.", flash[:alert]
+  end
+
   private
     def sign_up_and_complete(email_address: "owner-xero@example.com", full_name: "Owner Person")
       post signup_url, params: { signup: { email_address: email_address } }

@@ -49,7 +49,7 @@ class SignupsControllerTest < ActionDispatch::IntegrationTest
 
     user = magic_link.identity.users.owner.first
 
-    assert_redirected_to root_url
+    assert_redirected_to account_settings_url(script_name: user.account.slug)
     assert_equal "Owner Person", user.name
     assert_equal "owner@example.com", user.identity.email_address
     assert_equal "Owner's PaidJar", user.account.name

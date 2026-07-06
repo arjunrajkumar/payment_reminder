@@ -1,0 +1,29 @@
+<% @page_title = "Account Settings" %>
+
+<% content_for :header do %>
+  <h1>
+    <%= @page_title %>
+    <% unless Current.user.admin? %>
+      <div>Only admins can change these settings</div>
+    <% end %>
+  </h1>
+<% end %>
+
+<div>
+  <div>
+    <%= render "account/settings/name", account: @account %>
+    <%= render "account/settings/users", users: @users %>
+  </div>
+
+  <div>
+    <section>
+      <header>
+        <h2>Session</h2>
+      </header>
+
+      <%= button_to session_path(script_name: nil), method: :delete, form: { data: { turbo: false } } do %>
+        <span>Sign out</span>
+      <% end %>
+    </section>
+  </div>
+</div>

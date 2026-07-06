@@ -6,6 +6,8 @@ class User < ApplicationRecord
 
   validates :name, presence: true
 
+  scope :alphabetically, -> { order(:name, :id) }
+
   def deactivate
     transaction do
       update! active: false, identity: nil

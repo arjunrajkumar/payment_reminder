@@ -1,0 +1,11 @@
+<section>
+  <%= form_with model: account, url: account_settings_path, method: :put, scope: :account, data: { controller: "form" } do |form| %>
+    <strong><%= form.text_field :name, required: true, placeholder: "Account name...", readonly: !Current.user.admin? %></strong>
+
+    <% if Current.user.admin? %>
+      <%= form.button do %>
+        <span>Save changes</span>
+      <% end %>
+    <% end %>
+  <% end %>
+</section>

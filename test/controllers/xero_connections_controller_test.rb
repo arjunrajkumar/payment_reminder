@@ -10,7 +10,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
   test "connect redirects to Xero authorization" do
     sign_up_and_complete
 
-    with_xero_env do
+    with_xero_configured do
       fake_client = FakeXeroClient.new
 
       AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
@@ -34,7 +34,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
   test "callback stores token set active tenant and invoices on the current account" do
     account = sign_up_and_complete
 
-    with_xero_env do
+    with_xero_configured do
       fake_client = FakeXeroClient.new
 
       AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
@@ -58,7 +58,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
   test "callback rejects invalid state" do
     account = sign_up_and_complete
 
-    with_xero_env do
+    with_xero_configured do
       fake_client = FakeXeroClient.new
 
       AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
@@ -74,7 +74,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
   test "callback handles denied access" do
     account = sign_up_and_complete
 
-    with_xero_env do
+    with_xero_configured do
       get xero_callback_url, params: { error: "access_denied" }
     end
 
@@ -85,7 +85,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
   test "callback handles xero client errors" do
     account = sign_up_and_complete
 
-    with_xero_env do
+    with_xero_configured do
       fake_client = FakeXeroClient.new(error: AccountingIntegrations::Xero::OauthClient::Error.new("invalid grant"))
 
       AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
@@ -135,22 +135,9 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
       Identity.find_by!(email_address: email_address).accounts.first
     end
 
-    def with_xero_env
-      with_env(
-        "XERO_CLIENT_ID" => "client-123",
-        "XERO_CLIENT_SECRET" => "secret-123",
-        "XERO_SCOPES" => nil
-      ) do
-        yield
-      end
-    end
-
-    def with_env(values)
-      previous_values = values.to_h { |key, _value| [ key, ENV[key] ] }
-      values.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
+    def with_xero_configured
+      AccountingIntegrations::Xero::Configuration.any_instance.stubs(:configured?).returns(true)
       yield
-    ensure
-      previous_values.each { |key, value| value.nil? ? ENV.delete(key) : ENV[key] = value }
     end
 
     FakeXeroConfiguration = Struct.new(:configured?)

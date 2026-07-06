@@ -10,32 +10,24 @@ module AccountingIntegrations
         offline_access
       ].freeze
 
-      attr_reader :env
-
-      def initialize(env: ENV)
-        @env = env
-      end
-
       def configured?
-        client_id.present? && client_secret.present?
+        client_id.present? && client_secret.present? && redirect_uri.present?
       end
 
       def client_id
-        env["XERO_CLIENT_ID"].presence || Rails.application.credentials.dig(:xero, :client_id)
+        credentials[:client_id]
       end
 
       def client_secret
-        env["XERO_CLIENT_SECRET"].presence || Rails.application.credentials.dig(:xero, :client_secret)
+        credentials[:client_secret]
       end
 
       def scopes
-        env["XERO_SCOPES"].presence || DEFAULT_SCOPES.join(" ")
+        credentials[:scopes].presence || DEFAULT_SCOPES.join(" ")
       end
 
       def redirect_uri
-        env["XERO_REDIRECT_URI"].presence ||
-          Rails.application.credentials.dig(:xero, :redirect_uri) ||
-          "http://localhost:3000/xero/callback"
+        credentials[:redirect_uri]
       end
 
       def authorization_uri
@@ -57,6 +49,11 @@ module AccountingIntegrations
       def invoices_uri
         URI("https://api.xero.com/api.xro/2.0/Invoices")
       end
+
+      private
+        def credentials
+          Rails.application.credentials.xero || {}
+        end
     end
   end
 end

@@ -27,6 +27,10 @@ class InvoiceSource < ApplicationRecord
   has_many :invoices, dependent: :destroy
   has_many :webhook_events, class_name: "InvoiceSources::Webhooks::Event", dependent: :destroy
 
+  attribute :scopes, default: -> { [] }
+  attribute :provider_data, default: -> { {} }
+  attribute :raw_token_data, default: -> { {} }
+
   enum :provider, {
     xero: "xero",
     stripe: "stripe"

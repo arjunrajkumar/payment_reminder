@@ -3,6 +3,8 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
 
   belongs_to :invoice_source
 
+  attribute :payload, default: -> { {} }
+
   enum :status, {
     pending: "pending",
     processing: "processing",

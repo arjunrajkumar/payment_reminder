@@ -4,6 +4,9 @@ class Invoice < ApplicationRecord
   has_many :invoice_events, dependent: :destroy
   has_one :invoice_state, dependent: :destroy
 
+  attribute :provider_data, default: -> { {} }
+  attribute :raw_data, default: -> { {} }
+
   validates :external_id, presence: true
   validates :external_id, uniqueness: { scope: :invoice_source_id }
 

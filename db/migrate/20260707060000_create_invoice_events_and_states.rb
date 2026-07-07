@@ -10,7 +10,7 @@ class CreateInvoiceEventsAndStates < ActiveRecord::Migration[8.1]
       t.datetime :responded_at
       t.string :source
       t.string :source_message_id
-      t.json :metadata, null: false, default: {}
+      t.json :metadata, null: false
 
       t.timestamps
     end

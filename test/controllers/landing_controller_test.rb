@@ -1,20 +1,16 @@
 require "test_helper"
 
 class LandingControllerTest < ActionDispatch::IntegrationTest
-  test "root shows the landing page" do
+  test "root redirects signed out users to the marketing site" do
     get root_url
 
-    assert_response :success
-    assert_select "h1", "Welcome to PaidJar"
-    assert_select "a[href=?]", new_xero_connection_path, count: 0
-    assert_select "a[href=?]", invoices_path, count: 0
+    assert_redirected_to "https://www.paidjar.com"
   end
 
-  test "home shows the landing page" do
+  test "home redirects signed out users to the marketing site" do
     get home_url
 
-    assert_response :success
-    assert_select "h1", "Welcome to PaidJar"
+    assert_redirected_to "https://www.paidjar.com"
   end
 
   test "root redirects signed in accounts to invoices" do

@@ -12,9 +12,9 @@ class CreateAccountingIntegrationsAndInvoices < ActiveRecord::Migration[8.1]
       t.text :access_token
       t.text :refresh_token
       t.datetime :expires_at
-      t.json :scopes, null: false, default: []
-      t.json :provider_data, null: false, default: {}
-      t.json :raw_token_data, null: false, default: {}
+      t.json :scopes, null: false
+      t.json :provider_data, null: false
+      t.json :raw_token_data, null: false
       t.datetime :last_synced_at
       t.text :last_error
 
@@ -39,8 +39,8 @@ class CreateAccountingIntegrationsAndInvoices < ActiveRecord::Migration[8.1]
       t.date :due_on
       t.string :contact_external_id
       t.string :contact_name
-      t.json :provider_data, null: false, default: {}
-      t.json :raw_data, null: false, default: {}
+      t.json :provider_data, null: false
+      t.json :raw_data, null: false
       t.datetime :synced_at
 
       t.timestamps

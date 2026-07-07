@@ -8,7 +8,7 @@ class CreateInvoiceSourceWebhookEvents < ActiveRecord::Migration[8.1]
       t.string :resource_type
       t.string :resource_id
       t.datetime :occurred_at
-      t.json :payload, null: false, default: {}
+      t.json :payload, null: false
       t.string :status, null: false, default: "pending"
       t.datetime :processed_at
       t.text :last_error

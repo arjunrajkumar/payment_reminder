@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_070000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
   create_table "account_external_id_sequences", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -49,6 +49,26 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_070000) do
     t.index ["invoice_id", "situation"], name: "index_invoice_events_on_invoice_id_and_situation"
     t.index ["invoice_id"], name: "index_invoice_events_on_invoice_id"
     t.index ["source_message_id"], name: "index_invoice_events_on_source_message_id"
+  end
+
+  create_table "invoice_source_webhook_events", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "event_type", null: false
+    t.integer "invoice_source_id", null: false
+    t.text "last_error"
+    t.datetime "occurred_at"
+    t.json "payload", default: {}, null: false
+    t.datetime "processed_at"
+    t.string "provider", null: false
+    t.string "provider_event_id", null: false
+    t.string "resource_id"
+    t.string "resource_type"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["invoice_source_id", "provider_event_id"], name: "idx_on_invoice_source_id_provider_event_id_2b2653d813", unique: true
+    t.index ["invoice_source_id", "status"], name: "idx_on_invoice_source_id_status_f801f9a661"
+    t.index ["invoice_source_id"], name: "index_invoice_source_webhook_events_on_invoice_source_id"
+    t.index ["occurred_at"], name: "index_invoice_source_webhook_events_on_occurred_at"
   end
 
   create_table "invoice_sources", force: :cascade do |t|
@@ -152,6 +172,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_070000) do
   end
 
   add_foreign_key "invoice_events", "invoices"
+  add_foreign_key "invoice_source_webhook_events", "invoice_sources"
   add_foreign_key "invoice_sources", "accounts"
   add_foreign_key "invoice_states", "invoice_events", column: "latest_invoice_event_id"
   add_foreign_key "invoice_states", "invoices"

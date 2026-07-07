@@ -42,6 +42,7 @@ Please set up PaidJar locally.
      client_id: my-xero-client-id
      client_secret: my-xero-client-secret
      redirect_uri: http://localhost:3000/xero/callback
+     webhook_signing_key: my-xero-webhook-signing-key
 
    If I want Stripe connected, help me configure Rails credentials with:
 
@@ -49,6 +50,7 @@ Please set up PaidJar locally.
      client_id: my-stripe-connect-client-id
      secret_key: my-stripe-secret-key
      redirect_uri: http://localhost:3000/stripe/callback
+     webhook_signing_secret: whsec_my-stripe-webhook-secret
 
    Do not ask me to paste secrets into chat. Open the credentials editor and wait while I type them locally.
 7. Start the app with bin/rails server and tell me the localhost URL.
@@ -77,6 +79,13 @@ xero:
   client_id: your-client-id
   client_secret: your-client-secret
   redirect_uri: http://localhost:3000/xero/callback
+  webhook_signing_key: your-webhook-signing-key
+```
+
+For local webhook testing, expose your local app with a tunnel and configure the Xero webhook delivery URL to:
+
+```text
+https://your-tunnel.example/invoice_sources/webhooks/xero
 ```
 
 ## Stripe
@@ -100,9 +109,16 @@ stripe:
   client_id: your-connect-client-id
   secret_key: your-stripe-secret-key
   redirect_uri: http://localhost:3000/stripe/callback
+  webhook_signing_secret: whsec_your-webhook-secret
 ```
 
 PaidJar uses the connected Stripe account id returned by OAuth to read invoices through the Stripe API.
+
+For local webhook testing with the Stripe CLI:
+
+```bash
+stripe listen --forward-to localhost:3000/invoice_sources/webhooks/stripe
+```
 
 After credentials are configured, sign in and open `/invoice_sources` to connect Xero or Stripe.
 

@@ -13,6 +13,14 @@ Rails.application.routes.draw do
   end
 
   resources :invoice_sources, only: :index
+
+  namespace :invoice_sources do
+    namespace :webhooks do
+      post :stripe, to: "stripe#create"
+      post :xero, to: "xero#create"
+    end
+  end
+
   resources :invoices, only: :index
 
   resource :signup, only: %i[new create] do

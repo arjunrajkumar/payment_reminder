@@ -54,6 +54,10 @@ module InvoiceSources
         get_json(config.invoices_uri, access_token: access_token, tenant_id: tenant_id)
       end
 
+      def invoice(access_token:, tenant_id:, invoice_id:)
+        get_json(config.invoice_uri(invoice_id), access_token: access_token, tenant_id: tenant_id)
+      end
+
       private
         def post_token(form)
           request = Net::HTTP::Post.new(config.token_uri)

@@ -21,6 +21,15 @@ module InvoiceSources
         raise
       end
 
+      def sync_invoice_by_id!(external_id)
+        payload = client.invoice(stripe_account_id: source.external_account_id, invoice_id: external_id)
+        sync_invoice!(payload)
+        source.update!(status: :active, last_synced_at: Time.current, last_error: nil)
+      rescue OauthClient::Error => error
+        source.update!(status: :error, last_error: error.message)
+        raise
+      end
+
       private
         attr_reader :source, :client
 

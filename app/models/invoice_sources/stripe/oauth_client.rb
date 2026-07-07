@@ -50,6 +50,10 @@ module InvoiceSources
         { "data" => data }
       end
 
+      def invoice(stripe_account_id:, invoice_id:)
+        get_json(config.invoice_uri(invoice_id), stripe_account_id: stripe_account_id)
+      end
+
       private
         def post_token(form)
           request = Net::HTTP::Post.new(config.token_uri)

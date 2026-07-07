@@ -1,3 +1,5 @@
+require "cgi"
+
 module InvoiceSources
   class Xero
     class Configuration
@@ -20,6 +22,10 @@ module InvoiceSources
 
       def client_secret
         credentials[:client_secret]
+      end
+
+      def webhook_signing_key
+        credentials[:webhook_signing_key]
       end
 
       def scopes
@@ -48,6 +54,10 @@ module InvoiceSources
 
       def invoices_uri
         URI("https://api.xero.com/api.xro/2.0/Invoices")
+      end
+
+      def invoice_uri(invoice_id)
+        URI("https://api.xero.com/api.xro/2.0/Invoices/#{CGI.escape(invoice_id)}")
       end
 
       private

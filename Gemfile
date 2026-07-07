@@ -18,6 +18,7 @@ gem "stimulus-rails"
 gem "jbuilder"
 gem "geared_pagination", "~> 1.2"
 gem "platform_agent"
+gem "stripe", "~> 19.0"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"

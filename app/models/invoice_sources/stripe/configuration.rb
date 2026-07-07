@@ -1,3 +1,5 @@
+require "cgi"
+
 module InvoiceSources
   class Stripe
     class Configuration
@@ -13,6 +15,14 @@ module InvoiceSources
 
       def secret_key
         credentials[:secret_key]
+      end
+
+      def webhook_signing_secret
+        credentials[:webhook_signing_secret]
+      end
+
+      def webhook_signing_secrets
+        Array.wrap(credentials[:webhook_signing_secrets].presence || webhook_signing_secret).compact_blank
       end
 
       def scope
@@ -33,6 +43,10 @@ module InvoiceSources
 
       def invoices_uri
         URI("https://api.stripe.com/v1/invoices")
+      end
+
+      def invoice_uri(invoice_id)
+        URI("https://api.stripe.com/v1/invoices/#{CGI.escape(invoice_id)}")
       end
 
       private

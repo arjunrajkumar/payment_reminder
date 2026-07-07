@@ -25,6 +25,7 @@ class InvoiceSource < ApplicationRecord
 
   belongs_to :account, inverse_of: :invoice_sources
   has_many :invoices, dependent: :destroy
+  has_many :webhook_events, class_name: "InvoiceSources::Webhooks::Event", dependent: :destroy
 
   enum :provider, {
     xero: "xero",
@@ -65,6 +66,10 @@ class InvoiceSource < ApplicationRecord
 
   def sync_invoices!
     provider_adapter.sync_invoices!
+  end
+
+  def sync_invoice!(...)
+    provider_adapter.sync_invoice!(...)
   end
 
   def connected?

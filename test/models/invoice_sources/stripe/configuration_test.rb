@@ -33,6 +33,16 @@ module InvoiceSources
         end
       end
 
+      test "webhook signing secrets can be configured as one secret or many" do
+        with_stripe_credentials(webhook_signing_secret: "whsec_one") do
+          assert_equal [ "whsec_one" ], Configuration.new.webhook_signing_secrets
+        end
+
+        with_stripe_credentials(webhook_signing_secrets: [ "whsec_old", "whsec_new" ]) do
+          assert_equal [ "whsec_old", "whsec_new" ], Configuration.new.webhook_signing_secrets
+        end
+      end
+
       private
         def with_stripe_credentials(**stripe)
           credentials = ActiveSupport::OrderedOptions.new

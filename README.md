@@ -43,6 +43,13 @@ Please set up PaidJar locally.
      client_secret: my-xero-client-secret
      redirect_uri: http://localhost:3000/xero/callback
 
+   If I want Stripe connected, help me configure Rails credentials with:
+
+   stripe:
+     client_id: my-stripe-connect-client-id
+     secret_key: my-stripe-secret-key
+     redirect_uri: http://localhost:3000/stripe/callback
+
    Do not ask me to paste secrets into chat. Open the credentials editor and wait while I type them locally.
 7. Start the app with bin/rails server and tell me the localhost URL.
 ```
@@ -71,6 +78,33 @@ xero:
   client_secret: your-client-secret
   redirect_uri: http://localhost:3000/xero/callback
 ```
+
+## Stripe
+
+Create a Stripe Connect OAuth application and configure its redirect URI to:
+
+```text
+http://localhost:3000/stripe/callback
+```
+
+Then edit Rails credentials:
+
+```bash
+bin/rails credentials:edit
+```
+
+Add:
+
+```yaml
+stripe:
+  client_id: your-connect-client-id
+  secret_key: your-stripe-secret-key
+  redirect_uri: http://localhost:3000/stripe/callback
+```
+
+PaidJar uses the connected Stripe account id returned by OAuth to read invoices through the Stripe API.
+
+After credentials are configured, sign in and open `/invoice_sources` to connect Xero or Stripe.
 
 ## License
 

@@ -1,9 +1,34 @@
 class InvoiceSource < ApplicationRecord
+  AvailableSource = Struct.new(
+    :provider,
+    :name,
+    :description,
+    :connect_path_name,
+    :connected_source,
+    keyword_init: true
+  )
+
+  AVAILABLE_SOURCES = [
+    {
+      provider: :xero,
+      name: "Xero",
+      description: "Read invoices and customer details from your Xero organisation.",
+      connect_path_name: :new_xero_connection_path
+    },
+    {
+      provider: :stripe,
+      name: "Stripe",
+      description: "Read invoices and customer details from your connected Stripe account.",
+      connect_path_name: :new_stripe_connection_path
+    }
+  ].freeze
+
   belongs_to :account, inverse_of: :invoice_sources
   has_many :invoices, dependent: :destroy
 
   enum :provider, {
-    xero: "xero"
+    xero: "xero",
+    stripe: "stripe"
   }
 
   enum :status, {
@@ -17,7 +42,22 @@ class InvoiceSource < ApplicationRecord
   validates :external_account_id, presence: true
   validates :provider, uniqueness: { scope: :account_id }
 
-  scope :connected, -> { active.where.not(external_account_id: [ nil, "" ]).where.not(refresh_token: [ nil, "" ]) }
+  def self.available_sources_for(account)
+    AVAILABLE_SOURCES.map do |source|
+      AvailableSource.new(
+        **source,
+        connected_source: connected_for_provider(account, source.fetch(:provider))
+      )
+    end
+  end
+
+  def self.connected_for(account)
+    account.invoice_sources.order(:provider).select(&:connected?)
+  end
+
+  def self.connected_for_provider(account, provider)
+    account.invoice_sources.public_send(provider).detect(&:connected?)
+  end
 
   def connect!(...)
     provider_adapter.connect!(...)
@@ -28,11 +68,11 @@ class InvoiceSource < ApplicationRecord
   end
 
   def connected?
-    active? && external_account_id.present? && refresh_token.present?
+    provider_adapter.connected?
   end
 
   def requires_reauthorization?
-    refresh_token.blank? || disconnected? || error?
+    provider_adapter.requires_reauthorization?
   end
 
   def expired?

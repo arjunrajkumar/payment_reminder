@@ -1,0 +1,10 @@
+<h1>Stripe connected</h1>
+
+<% if @invoice_source.external_account_name.present? %>
+  <p>Connected account: <%= @invoice_source.external_account_name %></p>
+<% else %>
+  <p>Stripe is connected.</p>
+<% end %>
+
+<p><%= link_to "View invoices", invoices_path %></p>
+<p><%= button_to "Disconnect Stripe", stripe_connection_path, method: :delete %></p>

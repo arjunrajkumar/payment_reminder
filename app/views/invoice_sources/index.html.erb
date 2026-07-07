@@ -1,0 +1,17 @@
+<h1>Invoice sources</h1>
+
+<p>Connect an invoice source so PaidJar can read invoices and customer details.</p>
+
+<% @invoice_sources.each do |invoice_source| %>
+  <section>
+    <h2><%= invoice_source.name %></h2>
+    <p><%= invoice_source.description %></p>
+
+    <% if connected_source = invoice_source.connected_source %>
+      <p>Connected to <%= connected_source.external_account_name.presence || invoice_source.name %>.</p>
+      <p><%= link_to "View invoices", invoices_path %></p>
+    <% else %>
+      <p><%= link_to "Connect #{invoice_source.name}", public_send(invoice_source.connect_path_name) %></p>
+    <% end %>
+  </section>
+<% end %>

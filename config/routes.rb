@@ -1,9 +1,18 @@
 Rails.application.routes.draw do
   root "landing#index"
   get "/home", to: "landing#index", as: :home
-  get "/xero/connect", to: "xero_connections#new", as: :new_xero_connection
-  get "/xero/callback", to: "xero_connections#create", as: :xero_callback
-  resource :xero_connection, only: %i[show destroy]
+
+  scope module: :invoice_sources do
+    get "xero/connect", to: "xero_connections#new", as: :new_xero_connection
+    get "xero/callback", to: "xero_connections#create", as: :xero_callback
+    resource :xero_connection, controller: :xero_connections, only: %i[show destroy]
+
+    get "stripe/connect", to: "stripe_connections#new", as: :new_stripe_connection
+    get "stripe/callback", to: "stripe_connections#create", as: :stripe_callback
+    resource :stripe_connection, controller: :stripe_connections, only: %i[show destroy]
+  end
+
+  resources :invoice_sources, only: :index
   resources :invoices, only: :index
 
   resource :signup, only: %i[new create] do

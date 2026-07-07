@@ -30,6 +30,58 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     assert_predicate invoice_sources(:xero), :connected?
   end
 
+  test "stripe source is connected without a refresh token" do
+    source = accounts(:paid_jar).invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "acct_123"
+    )
+
+    assert_predicate source, :connected?
+    assert_not source.requires_reauthorization?
+    assert_includes InvoiceSource.connected_for(accounts(:paid_jar)), source
+  end
+
+  test "pending stripe source requires authorization" do
+    source = accounts(:paid_jar).invoice_sources.build(provider: :stripe)
+
+    assert_predicate source, :requires_reauthorization?
+  end
+
+  test "xero source requires a refresh token" do
+    account = Account.create!(name: "Xero Without Refresh")
+    source = account.invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "tenant-123"
+    )
+
+    assert_not_predicate source, :connected?
+    assert_predicate source, :requires_reauthorization?
+    assert_not_includes InvoiceSource.connected_for(account), source
+  end
+
+  test "available sources include supported providers and current connections" do
+    source = accounts(:paid_jar).invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "acct_123",
+      external_account_name: "PaidJar Stripe"
+    )
+
+    available_sources = InvoiceSource.available_sources_for(accounts(:paid_jar))
+    xero = available_sources.find { |available_source| available_source.provider == :xero }
+    stripe = available_sources.find { |available_source| available_source.provider == :stripe }
+
+    assert_equal "Xero", xero.name
+    assert_equal :new_xero_connection_path, xero.connect_path_name
+    assert_equal invoice_sources(:xero), xero.connected_source
+
+    assert_equal "Stripe", stripe.name
+    assert_equal :new_stripe_connection_path, stripe.connect_path_name
+    assert_equal source, stripe.connected_source
+  end
+
   test "delegates connection and invoice sync to provider adapter" do
     source = invoice_sources(:xero)
     adapter = mock

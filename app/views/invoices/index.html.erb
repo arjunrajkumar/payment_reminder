@@ -1,6 +1,6 @@
 <h1>Invoices</h1>
 
-<p>Connected to <%= @xero_source.external_account_name.presence || "Xero" %>.</p>
+<p>Connected to <%= @invoice_sources.map { |source| source.external_account_name.presence || source.provider.titleize }.to_sentence %>.</p>
 
 <% if @page.used? %>
   <table>
@@ -13,6 +13,7 @@
         <th>Due</th>
         <th>Total</th>
         <th>Due amount</th>
+        <th>Platform</th>
       </tr>
     </thead>
     <tbody>
@@ -25,6 +26,7 @@
           <td><%= invoice.due_on %></td>
           <td><%= number_to_currency invoice.total, unit: "#{invoice.currency} " %></td>
           <td><%= number_to_currency invoice.amount_due, unit: "#{invoice.currency} " %></td>
+          <td><%= invoice.invoice_source.provider.titleize %></td>
         </tr>
       <% end %>
     </tbody>

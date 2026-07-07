@@ -7,12 +7,12 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_url(script_name: nil)
   end
 
-  test "index starts Xero connection when no connection exists" do
+  test "index redirects to invoice sources when no connection exists" do
     sign_up_and_complete(email_address: "owner-invoices-no-xero@example.com")
 
     get invoices_url
 
-    assert_redirected_to new_xero_connection_url
+    assert_redirected_to invoice_sources_url
   end
 
   test "index shows synced invoices" do
@@ -38,6 +38,30 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_select "td", "INV-789"
     assert_select "td", "Acme Ltd"
     assert_select "td", "AUTHORISED"
+  end
+
+  test "index shows synced Stripe invoices without Xero" do
+    account = sign_up_and_complete(email_address: "owner-invoices-stripe@example.com")
+    source = create_stripe_source(account)
+    source.invoices.create!(
+      account: account,
+      external_id: "in_789",
+      number: "STR-789",
+      contact_name: "Stripe Customer",
+      status: "open",
+      currency: "USD",
+      total: 300,
+      amount_due: 125,
+      issued_on: Date.new(2026, 7, 1),
+      due_on: Date.new(2026, 7, 31)
+    )
+
+    get invoices_url
+
+    assert_response :success
+    assert_select "td", "STR-789"
+    assert_select "td", "Stripe Customer"
+    assert_select "td", "Stripe"
   end
 
   test "index paginates synced invoices" do
@@ -83,6 +107,15 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 30.minutes.from_now
+      )
+    end
+
+    def create_stripe_source(account)
+      account.invoice_sources.create!(
+        provider: :stripe,
+        status: :active,
+        external_account_id: "acct_123",
+        external_account_name: "PaidJar Stripe"
       )
     end
 

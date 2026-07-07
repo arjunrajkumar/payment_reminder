@@ -1,5 +1,5 @@
 class InvoicesController < ApplicationController
-  before_action :set_xero_source
+  before_action :set_invoice_sources
 
   def index
     set_page_and_extract_portion_from Current.account.invoices.includes(:invoice_source).recent
@@ -7,11 +7,8 @@ class InvoicesController < ApplicationController
 
   private
 
-  def set_xero_source
-    if xero_source = Current.account.invoice_sources.xero.connected.first
-      @xero_source = xero_source
-    else
-      redirect_to new_xero_connection_path
-    end
+  def set_invoice_sources
+    @invoice_sources = InvoiceSource.connected_for(Current.account)
+    redirect_to invoice_sources_path if @invoice_sources.none?
   end
 end

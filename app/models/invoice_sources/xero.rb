@@ -40,6 +40,14 @@ module InvoiceSources
       InvoiceSync.new(source, client: oauth_client).sync!
     end
 
+    def connected?
+      source.active? && source.external_account_id.present? && source.refresh_token.present?
+    end
+
+    def requires_reauthorization?
+      !connected?
+    end
+
     def refresh_access_token!
       token_set = oauth_client.refresh_token(refresh_token: source.refresh_token)
 

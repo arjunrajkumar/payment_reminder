@@ -1,15 +1,21 @@
 require "test_helper"
 
 class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
-  test "show renders account name and users" do
+  test "show renders account settings dashboard" do
     account = sign_up_and_complete
 
     get account_settings_url(script_name: account.slug)
 
     assert_response :success
-    assert_select "h1", "Account Settings"
-    assert_select "input[name='account[name]'][value=?]", account.name
-    assert_select "li", text: /Owner Person/
+    assert_select "h1", "Settings"
+    assert_select "#nav a[aria-current='page']", "Settings"
+    assert_select ".app-card__title", "Business profile"
+    assert_select ".app-field", account.name
+    assert_select ".app-field", "owner-settings@example.com"
+    assert_select ".app-card__title", "Accounting integration"
+    assert_select ".app-card__title", "Reminder cadence"
+    assert_select ".app-card__title", "Notifications"
+    assert_select "section", { text: "People on this account", count: 0 }
     assert_select "button", text: /Sign out/, count: 0
   end
 

@@ -6,7 +6,7 @@ AI accounts-receivable inbox that gets freelancers and small teams paid faster â
 
 - Ruby 3.4.5
 - Rails 8.1.3
-- SQLite
+- MySQL 8
 - Hotwire: Turbo and Stimulus
 - Importmap for JavaScript
 - Propshaft for assets

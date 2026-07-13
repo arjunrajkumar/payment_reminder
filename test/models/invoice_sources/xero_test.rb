@@ -18,6 +18,10 @@ module InvoiceSources
       assert_equal "tenant-123", source.external_account_id
       assert_equal "PaymentReminder Demo", source.external_account_name
       assert_equal "person@example.com", source.provider_data["email"]
+      assert_equal "Bearer", source.raw_token_data["token_type"]
+      refute source.raw_token_data.key?("access_token")
+      refute source.raw_token_data.key?("refresh_token")
+      refute source.raw_token_data.key?("id_token")
       assert fake_client.exchange_code_called
       assert fake_client.connections_called
       assert fake_client.userinfo_called
@@ -53,6 +57,8 @@ module InvoiceSources
 
       assert_equal "new-access-token", source.reload.access_token
       assert_equal "new-refresh-token", source.refresh_token
+      refute source.raw_token_data.key?("access_token")
+      refute source.raw_token_data.key?("refresh_token")
       assert fake_client.refresh_token_called
     end
 

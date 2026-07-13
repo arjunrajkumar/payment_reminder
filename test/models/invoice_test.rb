@@ -24,4 +24,11 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_not invoice.valid?
     assert_includes invoice.errors[:external_id], "has already been taken"
   end
+
+  test "identifies paid invoices from either provider status or settled amounts" do
+    assert_predicate Invoice.new(status: "PAID", amount_due: 100, amount_paid: 0), :paid?
+    assert_predicate Invoice.new(status: "AUTHORISED", amount_due: 0, amount_paid: 100), :paid?
+    assert_not_predicate Invoice.new(status: "AUTHORISED", amount_due: 0, amount_paid: 0), :paid?
+    assert_not_predicate Invoice.new(status: "AUTHORISED", amount_due: 100, amount_paid: 0), :paid?
+  end
 end

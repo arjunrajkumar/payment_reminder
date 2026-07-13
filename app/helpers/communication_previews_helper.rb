@@ -1,14 +1,25 @@
 module CommunicationPreviewsHelper
   INBOX_STATE_PRIORITY = {
-    reply: 0,
     dispute: 1,
     no_reply: 2,
     waiting: 3,
-    outgoing: 3,
     scheduled: 3,
     monitoring: 4,
     not_contacted: 4,
     paid_up: 5
+  }.freeze
+
+  # Temporary named examples used by the UI prototype until communication and
+  # collection outcomes are persisted and can feed the normal profile rules.
+  DEMO_PAYER_PROFILE_OVERRIDES = {
+    "nat dogre" => { key: :new },
+    "brightside studio" => { key: :sometimes_late },
+    "greenline foods" => { key: :slow_payer },
+    "harbor & co" => { key: :unreliable_payer },
+    "northstar consulting" => { key: :sometimes_late },
+    "pixelcraft labs" => { key: :new },
+    "reliable retainer" => { key: :pays_on_time },
+    "slow payer co" => { key: :slow_payer }
   }.freeze
 
   def communication_preview_for(customer)
@@ -19,12 +30,9 @@ module CommunicationPreviewsHelper
         state: :not_contacted,
         status: "Not contacted",
         tone: "slate",
-        headline: "No conversation yet",
-        snippet: "Start a personal conversation when this account needs attention.",
+        activity: latest_activity(:no_activity),
+        summary: default_payment_summary(customer),
         timestamp: nil,
-        next_touch: "Review account",
-        next_step: customer.reminder_recommendation.fetch(:name),
-        action_label: "Review account",
         needs_attention: customer.overdue_invoices.any?,
         contact_email: customer.email
       }
@@ -39,21 +47,31 @@ module CommunicationPreviewsHelper
     customer.email.presence || communication_preview_for(customer).fetch(:contact_email, nil)
   end
 
-  def collection_segment_for(customer)
-    return inferred_collection_segment(customer) if customer.outstanding_invoices.none?
+  def payer_profile_for(customer)
+    override = DEMO_PAYER_PROFILE_OVERRIDES[customer.name.to_s.squish.downcase]
+    Customers::PayerProfile.new(customer, override: override).to_h
+  end
 
-    collection_segments.fetch(customer.name.to_s.squish.downcase) { inferred_collection_segment(customer) }
+  def collection_status_for(customer, preview: communication_preview_for(customer))
+    Customers::CollectionStatus.new(
+      customer,
+      collection_state: preview.fetch(:state),
+      needs_attention: preview.fetch(:needs_attention)
+    ).to_h
   end
 
   def communication_thread_for(customer)
     preview = communication_preview_for(customer)
     invoice = customer.next_expected_invoice
     invoice_number = invoice&.number.presence || invoice&.external_id || "the open invoice"
-    event_kind = communication_event_kind(preview.fetch(:state))
 
     return paid_up_thread(customer) if preview.fetch(:state) == :paid_up
+    return nat_dogre_thread(invoice_number) if customer.name.casecmp?("Nat Dogre")
     return reliable_retainer_thread(invoice_number) if customer.name.casecmp?("Reliable Retainer")
     return brightside_thread(invoice_number) if customer.name.casecmp?("Brightside Studio")
+    return [] if preview.fetch(:state) == :not_contacted
+
+    event_kind = communication_event_kind(preview.fetch(:state))
 
     [
       {
@@ -65,8 +83,8 @@ module CommunicationPreviewsHelper
       {
         kind: event_kind,
         label: preview.fetch(:event_label, communication_event_label(event_kind, customer.name)),
-        timestamp: preview.fetch(:timestamp) || "Today",
-        body: preview.fetch(:thread_body, preview.fetch(:snippet))
+        timestamp: preview.fetch(:timestamp) || "Current",
+        body: preview.fetch(:thread_body, preview.fetch(:activity).description)
       }
     ]
   end
@@ -76,11 +94,18 @@ module CommunicationPreviewsHelper
       preview = communication_preview_for(customer)
 
       [
-        INBOX_STATE_PRIORITY.fetch(preview.fetch(:state), 4),
+        customer_inbox_state_priority(customer, preview),
         customer.overdue_invoices.any? ? 0 : 1,
         -customer.oldest_overdue_days.to_i,
         customer.name.downcase
       ]
+    end
+
+    def customer_inbox_state_priority(customer, preview)
+      state = preview.fetch(:state)
+      return INBOX_STATE_PRIORITY.fetch(:monitoring) if state == :no_reply && customer.overdue_invoices.none?
+
+      INBOX_STATE_PRIORITY.fetch(state, 4)
     end
 
     def paid_up_communication_preview(customer)
@@ -88,12 +113,9 @@ module CommunicationPreviewsHelper
         state: :paid_up,
         status: "Paid up",
         tone: "slate",
-        headline: "No open balance",
-        snippet: "No collection follow-up is needed while this account remains paid up.",
-        timestamp: customer.last_payment_on ? "Paid #{customer.last_payment_on.strftime("%b %-d")}" : nil,
-        next_touch: "None",
-        next_step: "No action needed",
-        action_label: "View account",
+        activity: latest_activity(:payment_received, description: payment_received_description(customer)),
+        summary: "#{payment_received_description(customer)}. No follow-up needed.",
+        timestamp: customer.last_payment_on&.strftime("%b %-d"),
         needs_attention: false,
         contact_email: customer.email
       }
@@ -101,7 +123,7 @@ module CommunicationPreviewsHelper
 
     def communication_event_kind(state)
       case state
-      when :waiting, :outgoing then :outgoing
+      when :waiting then :outgoing
       when :scheduled then :scheduled
       when :no_reply, :monitoring, :not_contacted, :paid_up then :system
       else :incoming
@@ -120,28 +142,22 @@ module CommunicationPreviewsHelper
     def communication_previews
       {
         "nat dogre" => {
-          state: :reply,
-          status: "Customer replied",
-          tone: "blue",
-          headline: "Reply received 28 min ago",
-          snippet: "Payment is being processed. Can you confirm the bank details we should use?",
-          timestamp: "28 min ago",
-          next_touch: "Now",
-          next_step: "Reply with payment details",
-          action_label: "Open reply",
-          needs_attention: true,
+          state: :waiting,
+          status: "Awaiting customer",
+          tone: "green",
+          activity: latest_activity(:we_replied, description: "Sent the requested payment details"),
+          summary: "Customer says payment is being processed. We sent the requested payment details and will follow up in 3 days if unpaid.",
+          timestamp: "24 min ago",
+          needs_attention: false,
           contact_email: "accounts@natdogre.example"
         },
         "brightside studio" => {
           state: :dispute,
           status: "Dispute raised",
           tone: "red",
-          headline: "Invoice disputed 1 hr ago",
-          snippet: "This amount does not match the scope we agreed for phase two.",
+          activity: latest_activity(:customer_replied),
+          summary: "Customer disputes the phase-two amount. Review it with the project owner before asking for payment.",
           timestamp: "1 hr ago",
-          next_touch: "Now",
-          next_step: "Review the dispute with the project owner",
-          action_label: "Review dispute",
           needs_attention: true,
           contact_email: "billing@brightsidestudio.example"
         },
@@ -149,13 +165,10 @@ module CommunicationPreviewsHelper
           state: :waiting,
           status: "Awaiting customer",
           tone: "green",
-          headline: "You replied 2 hr ago",
-          snippet: "Thanks for checking. We sent the requested line-item breakdown and invited any follow-up questions.",
+          activity: latest_activity(:we_replied),
+          summary: "We sent the requested line-item breakdown. Waiting for their reply.",
           thread_body: "Thanks for checking on this. We sent the line-item breakdown for the invoice and highlighted how the outstanding balance was calculated. Please reply if any line still needs clarification.",
           timestamp: "2 hr ago",
-          next_touch: "When they reply",
-          next_step: "Wait for the customer response",
-          action_label: "View thread",
           needs_attention: false,
           contact_email: "ap@greenlinefoods.example"
         },
@@ -163,12 +176,9 @@ module CommunicationPreviewsHelper
           state: :scheduled,
           status: "Scheduled",
           tone: "blue",
-          headline: "Reminder scheduled",
-          snippet: "A personal follow-up is queued for tomorrow at 9:00 AM.",
+          activity: latest_activity(:scheduled),
+          summary: "A reminder will send tomorrow at 9:00 AM if the invoice is still unpaid.",
           timestamp: "Tomorrow, 9:00 AM",
-          next_touch: "Tomorrow, 9:00 AM",
-          next_step: "Review before it sends",
-          action_label: "Review message",
           needs_attention: false,
           contact_email: "finance@northstar.example"
         },
@@ -176,12 +186,9 @@ module CommunicationPreviewsHelper
           state: :no_reply,
           status: "No reply",
           tone: "amber",
-          headline: "No reply after 3 reminders",
-          snippet: "The last reminder was opened 6 days ago, but no one has responded.",
+          activity: latest_activity(:reminder_opened),
+          summary: "No reply after three reminders. Escalate to a person.",
           timestamp: "6 days ago",
-          next_touch: "Today",
-          next_step: "Escalate to a person",
-          action_label: "Review escalation",
           needs_attention: true,
           contact_email: "accounts@harborco.example"
         },
@@ -189,133 +196,87 @@ module CommunicationPreviewsHelper
           state: :monitoring,
           status: "Monitoring",
           tone: "slate",
-          headline: "No message due yet",
-          snippet: "Payment is expected Jul 15 based on this customer's usual timing.",
-          timestamp: "Jul 15",
-          next_touch: "Jul 15",
-          next_step: "Check again Jul 15",
-          action_label: "View account",
+          activity: latest_activity(:no_activity, description: "Payment is expected Jul 15 based on their usual timing"),
+          summary: "Payment is 12 days overdue, but this matches their usual timing. We will check for payment Jul 15.",
+          timestamp: nil,
           needs_attention: false,
           contact_email: "billing@slowpayer.example"
         },
         "reliable retainer" => {
-          state: :scheduled,
-          status: "Scheduled",
-          tone: "blue",
-          headline: "Pre-due check-in scheduled",
-          snippet: "A personal check-in is ready to send Jul 22 at 9:00 AM if the invoice is still open.",
-          timestamp: "Jul 22, 9:00 AM",
-          next_touch: "Jul 22, 9:00 AM",
-          next_step: "No action needed today",
-          action_label: "Review scheduled message",
+          state: :waiting,
+          status: "Awaiting payment",
+          tone: "green",
+          activity: latest_activity(:we_replied, description: "Thanked them for confirming payment Tuesday"),
+          summary: "Customer promises to pay Tuesday. We will follow up Wednesday if it is still unpaid.",
+          timestamp: "18 min ago",
           needs_attention: false,
           contact_email: "billing@reliableretainer.example"
         },
         "pixelcraft labs" => {
-          state: :scheduled,
-          status: "Scheduled",
-          tone: "blue",
-          headline: "Standard pre-due reminder scheduled",
-          snippet: "A brief, helpful reminder is queued for Jul 22, three days before the due date.",
-          thread_body: "A brief, helpful reminder will send three days before the due date. No action will be requested if payment is already scheduled.",
-          event_label: "Automatic reminder",
-          timestamp: "Jul 22, 9:00 AM",
-          next_touch: "Jul 22, 9:00 AM",
-          next_step: "No action until Jul 22",
-          action_label: "Review scheduled reminder",
+          state: :no_reply,
+          status: "No reply",
+          tone: "amber",
+          activity: latest_activity(:reminder_opened),
+          summary: "No reply after three reminders, but the invoice is not due for 12 days. No further action today.",
+          timestamp: "Yesterday",
           needs_attention: false,
           contact_email: "accounts@pixelcraft.example"
         }
       }
     end
 
-    def collection_segments
-      {
-        "nat dogre" => segment(
-          :new_high_value,
-          "New high-value",
-          "blue",
-          "Personal and direct",
-          "Human review",
-          "High balance with no recorded payment history"
-        ),
-        "brightside studio" => segment(
-          :disputed,
-          "Disputed account",
-          "red",
-          "Empathetic and precise",
-          "Automation paused",
-          "Resolve the scope dispute before requesting payment"
-        ),
-        "greenline foods" => segment(
-          :at_risk,
-          "At risk",
-          "red",
-          "Clear and collaborative",
-          "Human follow-up",
-          "Long-overdue balance with an active customer enquiry"
-        ),
-        "harbor & co" => segment(
-          :unresponsive,
-          "Unresponsive",
-          "amber",
-          "Firm and concise",
-          "Escalation only",
-          "Repeated reminders were opened without a reply or payment"
-        ),
-        "northstar consulting" => segment(
-          :at_risk,
-          "At risk",
-          "red",
-          "Firm and courteous",
-          "Scheduled follow-up",
-          "The invoice is materially overdue with no paid history"
-        ),
-        "pixelcraft labs" => segment(
-          :standard,
-          "Standard cadence",
-          "blue",
-          "Brief and helpful",
-          "Standard pre-due",
-          "Current invoice with no exception requiring human review"
-        ),
-        "reliable retainer" => segment(
-          :trusted,
-          "Trusted payer",
-          "green",
-          "Warm and personal",
-          "Low-frequency courtesy",
-          "Consistently on time across the recorded relationship"
-        ),
-        "slow payer co" => segment(
-          :habitually_late,
-          "Habitually late",
-          "amber",
-          "Calm and specific",
-          "Behavior-timed",
-          "Usually pays late, so reminders follow their expected timing"
-        )
-      }
+    def default_payment_summary(customer)
+      invoice = customer.next_expected_invoice
+      return "No collection conversation yet. Review the open balance." unless invoice
+
+      due_context = customer_invoice_due_context(invoice, as_of: customer.as_of).downcase
+      if invoice.due_on && invoice.due_on < customer.as_of
+        "No collection conversation yet. The invoice is #{due_context}; send a reminder."
+      else
+        "No collection conversation yet. The invoice is #{due_context}; no action is needed today."
+      end
     end
 
-    def inferred_collection_segment(customer)
-      return segment(:paid_up, "Paid up", "slate", "No message needed", "None", "No outstanding balance") if customer.outstanding_invoices.none?
-      return segment(:trusted, "Trusted payer", "green", "Warm and personal", "Low-frequency courtesy", "Strong on-time payment history") if customer.on_time_rate.to_i >= 90 && customer.payment_history_count >= 3
-      return segment(:at_risk, "At risk", "red", "Clear and firm", "Human follow-up", "The oldest balance is more than 60 days overdue") if customer.oldest_overdue_days.to_i >= 60
-      return segment(:new_high_value, "New high-value", "blue", "Personal and direct", "Human review", "High balance without enough payment history") if customer.value_segment == "High value"
-
-      segment(:standard, "Standard cadence", "slate", "Brief and helpful", "Standard reminder", "No exceptional collection behavior detected")
+    def latest_activity(kind, description: nil)
+      Customers::LatestActivity.new(kind: kind, description: description)
     end
 
-    def segment(key, name, tone, reply_tone, cadence, rationale)
-      {
-        key: key,
-        name: name,
-        tone: tone,
-        reply_tone: reply_tone,
-        cadence: cadence,
-        rationale: rationale
-      }
+    def payment_received_description(customer)
+      payment = customer.paid_invoices.max_by { |invoice| invoice.paid_on || Date.new(1, 1, 1) }
+      return "Payment recorded; balance paid in full" unless payment
+
+      paid_amount = payment.amount_paid.to_d.positive? ? payment.amount_paid : payment.total
+      amount = receivable_amount(paid_amount, payment.currency)
+      "#{amount} received; balance paid in full"
+    end
+
+    def nat_dogre_thread(invoice_number)
+      [
+        {
+          kind: :system,
+          label: "Invoice shared",
+          timestamp: "Jul 3, 9:12 AM",
+          body: "#{invoice_number} was emailed to accounts@natdogre.example."
+        },
+        {
+          kind: :incoming,
+          label: "Nat Dogre",
+          timestamp: "28 min ago",
+          body: "Payment is being processed. Can you confirm the bank details we should use?"
+        },
+        {
+          kind: :outgoing,
+          label: "Payment details sent",
+          timestamp: "24 min ago",
+          body: "We sent the bank details for this payment and asked them to confirm once it is scheduled."
+        },
+        {
+          kind: :scheduled,
+          label: "Automatic follow-up",
+          timestamp: "Jul 16",
+          body: "If neither a reply nor payment arrives, PaymentReminder will send a follow-up."
+        }
+      ]
     end
 
     def reliable_retainer_thread(invoice_number)
@@ -329,14 +290,20 @@ module CommunicationPreviewsHelper
         {
           kind: :incoming,
           label: "Reliable Retainer",
-          timestamp: "Jul 3, 10:18 AM",
-          body: "Thanks — everything is approved on our side for payment this month."
+          timestamp: "22 min ago",
+          body: "I am travelling today, but I will clear the payment on Tuesday."
+        },
+        {
+          kind: :outgoing,
+          label: "Payment date acknowledged",
+          timestamp: "18 min ago",
+          body: "Thanks for letting us know. We will look out for the payment on Tuesday."
         },
         {
           kind: :scheduled,
-          label: "Scheduled message",
-          timestamp: "Jul 22, 9:00 AM",
-          body: "A personal pre-due check-in will send only if the invoice is still open."
+          label: "Automatic follow-up",
+          timestamp: "Wednesday, 9:00 AM",
+          body: "If payment has not arrived, PaymentReminder will send a short follow-up."
         }
       ]
     end

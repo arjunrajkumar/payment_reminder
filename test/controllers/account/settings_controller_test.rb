@@ -1,7 +1,7 @@
 require "test_helper"
 
 class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
-  test "show renders account settings dashboard" do
+  test "show renders simplified account settings" do
     account = sign_up_and_complete
 
     get account_settings_url(script_name: account.slug)
@@ -11,7 +11,10 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "#nav a[aria-current='page']", "Settings"
     assert_select ".app-card__title", "Business profile"
     assert_select ".app-field", account.name
-    assert_select ".app-field", "owner-settings@example.com"
+    assert_select ".app-field", count: 1
+    assert_select "body", { text: "owner-settings@example.com", count: 0 }
+    assert_select "body", { text: "Billing email", count: 0 }
+    assert_select "body", { text: "Currency", count: 0 }
     assert_select ".app-card__title", "Accounting integration"
     assert_select "a[href=?]", new_xero_connection_path, "Connect"
     assert_select "a[href=?]", new_stripe_connection_path, "Connect"

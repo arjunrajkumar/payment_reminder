@@ -9,7 +9,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to home_url(script_name: account.slug)
   end
 
-  test "show presents customer payment intelligence and invoice history" do
+  test "show presents the payment summary invoice timing and conversation" do
     account = sign_up_and_complete(email_address: "owner-customer-show@example.com")
     source = create_invoice_source(account)
     paid = create_invoice(
@@ -37,25 +37,28 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     create_invoice(source, external_id: "other", contact_external_id: "other", customer: "Other Customer", amount_due: 500)
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      get customer_url(Customers::Profile.to_param_for(paid), script_name: account.slug)
+      get customer_url(customer_key_for(paid), script_name: account.slug)
     end
 
     assert_response :success
     assert_select "h1", "Harbor & Co"
-    assert_select "[data-testid='customer-outstanding']", text: /INR 950/
-    assert_select "[data-testid='customer-total-billed']", text: /INR 2,150/
-    assert_select "[data-testid='customer-payment-timing']", text: "5 days late"
-    assert_select "[data-testid='customer-expected-collection']", text: "Apr 2-8, 2026"
-    assert_select "[data-testid='customer-on-time-rate']", text: "0%"
-    assert_select "[data-testid='customer-recommendation']", text: /Review this account today/
-    assert_select "[data-testid='customer-recommendation']", text: /Firm overdue follow-up/
-    assert_select "#open-invoices", text: /HARBOR-OVERDUE/
-    assert_select "#customer-invoices tbody tr", 2
-    assert_select "[data-testid='payment-history-event']", 1
+    assert_select ".app-page-subtitle", "Customer segment: Unreliable payer"
+    assert_select ".app-customer-header .app-collection-status", "Unpaid"
+    assert_select "#payment-summary-title", "Payment summary"
+    assert_select ".app-customer-summary__copy", text: /No reply after three reminders/
+    assert_select ".app-customer-summary__receivable", text: /INR 950 outstanding/
+    assert_select ".app-customer-summary__receivable", text: /1 invoice/
+    assert_select "#payment-pattern-title", "Invoice timing"
+    assert_select "[data-testid='payment-history-event']", 2
+    assert_select "[data-testid='payment-history-event']", text: /HARBOR-PAID.*5 days late/m
+    assert_select "[data-testid='payment-history-event']", text: /HARBOR-OVERDUE.*102 days overdue/m
+    assert_select "#conversation", text: /Conversation/
+    assert_select "#conversation", text: /No response after three reminders/
+    assert_select "#open-invoices, #customer-invoices, [data-testid='customer-recommendation']", count: 0
     assert_select "body", { text: "Other Customer", count: 0 }
   end
 
-  test "show isolates unusual payment dates from the main payment pattern" do
+  test "show plots every dated invoice on the invoice timing graph" do
     account = sign_up_and_complete(email_address: "owner-customer-anomaly@example.com")
     source = create_invoice_source(account)
     unusual = create_invoice(source, external_id: "unusual", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "PAID", issued_on: Date.new(2026, 1, 1), due_on: Date.new(2026, 7, 31), paid_on: Date.new(2026, 1, 29))
@@ -64,15 +67,73 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     create_invoice(source, external_id: "current", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 250, due_on: Date.new(2026, 7, 25))
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      get customer_url(Customers::Profile.to_param_for(unusual), script_name: account.slug)
+      get customer_url(customer_key_for(unusual), script_name: account.slug)
     end
 
     assert_response :success
-    assert_select "[data-testid='data-quality-warning']", text: /183 days before its due date/
-    assert_select "[data-testid='payment-history-event']", 2
-    assert_select "#invoice-#{unusual.id} .app-pill", "Check data"
-    assert_select "[data-testid='customer-expected-collection']", text: "Jul 22-25, 2026"
-    assert_select "body", { text: "183 days early", count: 0 }
+    assert_select ".app-page-subtitle", "Customer segment: Pays on time"
+    assert_select ".app-customer-header .app-collection-status", "In progress"
+    assert_select "[data-testid='payment-history-event']", 4
+    assert_select "[data-testid='payment-history-event']", text: /UNUSUAL.*183 days early/m
+    assert_select "[data-testid='payment-history-event']", text: /TYPICAL-1.*On due date/m
+    assert_select "[data-testid='payment-history-event']", text: /TYPICAL-2.*3 days early/m
+    assert_select "[data-testid='payment-history-event']", text: /CURRENT.*Due in 14 days/m
+  end
+
+  test "show keeps an uncontacted customer's conversation empty and qualifies each outstanding currency" do
+    account = sign_up_and_complete(email_address: "owner-generic-customer@example.com")
+    source = create_invoice_source(account)
+    customer_invoice = create_invoice(
+      source,
+      external_id: "generic-inr",
+      contact_external_id: "generic",
+      customer: "Generic Customer",
+      amount_due: 100
+    )
+    create_invoice(
+      source,
+      external_id: "generic-usd",
+      contact_external_id: "generic",
+      customer: "Generic Customer",
+      amount_due: 200,
+      currency: "USD"
+    )
+
+    travel_to Time.zone.local(2026, 7, 11, 12) do
+      get customer_url(customer_key_for(customer_invoice), script_name: account.slug)
+    end
+
+    assert_response :success
+    assert_select ".app-customer-summary__receivable .app-currency-total", 2
+    assert_select ".app-customer-summary__receivable .app-currency-total", "INR 100 outstanding"
+    assert_select ".app-customer-summary__receivable .app-currency-total", "USD 200 outstanding"
+    assert_select "#conversation .app-empty-inline", "No message or payment activity yet"
+    assert_select "#conversation .app-conversation-event", count: 0
+    assert_select "#conversation", { text: /Invoice shared|was emailed|Jul 3/, count: 0 }
+  end
+
+  test "show identifies a paid invoice when the provider omits its payment date" do
+    account = sign_up_and_complete(email_address: "owner-customer-paid-without-date@example.com")
+    source = create_invoice_source(account)
+    paid = create_invoice(
+      source,
+      external_id: "paid-without-date",
+      contact_external_id: "paid-without-date",
+      customer: "Paid Customer",
+      amount_due: 0,
+      amount_paid: 100,
+      total: 100,
+      status: "PAID",
+      due_on: Date.new(2026, 6, 30)
+    )
+
+    travel_to Time.zone.local(2026, 7, 11, 12) do
+      get customer_url(customer_key_for(paid), script_name: account.slug)
+    end
+
+    assert_response :success
+    assert_select "[data-testid='payment-history-event']", text: /PAID-WITHOUT-DATE.*Paid.*Date unavailable/m
+    assert_select "[data-testid='payment-history-event'] .app-payment-event__marker", count: 0
   end
 
   test "show does not expose another account customer" do
@@ -84,7 +145,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     other_source = create_invoice_source(other_account)
     other_invoice = create_invoice(other_source, external_id: "private", contact_external_id: "private", customer: "Private Customer", amount_due: 500)
 
-    get customer_url(Customers::Profile.to_param_for(other_invoice), script_name: account.slug)
+    get customer_url(customer_key_for(other_invoice), script_name: account.slug)
 
     assert_response :not_found
   end
@@ -102,7 +163,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
       )
     end
 
-    def create_invoice(source, external_id:, contact_external_id:, customer:, amount_due:, issued_on: Date.new(2026, 7, 1), due_on: Date.new(2026, 7, 31), paid_on: nil, status: "AUTHORISED", amount_paid: 0, total: nil)
+    def create_invoice(source, external_id:, contact_external_id:, customer:, amount_due:, issued_on: Date.new(2026, 7, 1), due_on: Date.new(2026, 7, 31), paid_on: nil, status: "AUTHORISED", amount_paid: 0, total: nil, currency: "INR")
       source.invoices.create!(
         account: source.account,
         external_id: external_id,
@@ -111,7 +172,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
         contact_external_id: contact_external_id,
         contact_name: customer,
         status: status,
-        currency: "INR",
+        currency: currency,
         total: total || amount_due,
         amount_due: amount_due,
         amount_paid: amount_paid,
@@ -119,6 +180,10 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
         due_on: due_on,
         paid_on: paid_on
       )
+    end
+
+    def customer_key_for(invoice)
+      Customers::Profile.encode_identity(Customers::Profile.identity_for(invoice))
     end
 
     def sign_up_and_complete(email_address: "owner-customers@example.com")

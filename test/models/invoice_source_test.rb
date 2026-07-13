@@ -30,6 +30,44 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     assert_predicate invoice_sources(:xero), :connected?
   end
 
+  test "encrypts OAuth tokens at rest" do
+    source = Account.create!(name: "Encrypted Tokens").invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "encrypted-token-tenant",
+      access_token: "secret-access-token",
+      refresh_token: "secret-refresh-token"
+    )
+
+    stored_tokens = InvoiceSource.connection.select_one(
+      InvoiceSource.sanitize_sql_array(
+        [ "SELECT access_token, refresh_token FROM invoice_sources WHERE id = ?", source.id ]
+      )
+    )
+
+    assert_equal "secret-access-token", source.reload.access_token
+    assert_equal "secret-refresh-token", source.refresh_token
+    refute_includes stored_tokens.fetch("access_token"), "secret-access-token"
+    refute_includes stored_tokens.fetch("refresh_token"), "secret-refresh-token"
+  end
+
+  test "disconnect removes every stored token value" do
+    source = Account.create!(name: "Disconnected Tokens").invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "disconnected-token-tenant",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      raw_token_data: { "token_type" => "Bearer" }
+    )
+
+    source.disconnect!
+
+    assert_nil source.access_token
+    assert_nil source.refresh_token
+    assert_empty source.raw_token_data
+  end
+
   test "stripe source is connected without a refresh token" do
     source = accounts(:paid_jar).invoice_sources.create!(
       provider: :stripe,
@@ -38,17 +76,16 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     )
 
     assert_predicate source, :connected?
-    assert_not source.requires_reauthorization?
     assert_includes InvoiceSource.connected_for(accounts(:paid_jar)), source
   end
 
-  test "pending stripe source requires authorization" do
+  test "pending stripe source is not connected" do
     source = accounts(:paid_jar).invoice_sources.build(provider: :stripe)
 
-    assert_predicate source, :requires_reauthorization?
+    assert_not_predicate source, :connected?
   end
 
-  test "xero source requires a refresh token" do
+  test "xero source is not connected without a refresh token" do
     account = Account.create!(name: "Xero Without Refresh")
     source = account.invoice_sources.create!(
       provider: :xero,
@@ -57,7 +94,6 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     )
 
     assert_not_predicate source, :connected?
-    assert_predicate source, :requires_reauthorization?
     assert_not_includes InvoiceSource.connected_for(account), source
   end
 

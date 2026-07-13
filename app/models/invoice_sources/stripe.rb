@@ -24,7 +24,7 @@ module InvoiceSources
           token_type: token_set["token_type"],
           stripe_publishable_key: token_set["stripe_publishable_key"]
         }.compact,
-        raw_token_data: token_set,
+        raw_token_data: InvoiceSource.sanitized_token_data(token_set),
         last_error: nil
       )
 
@@ -41,10 +41,6 @@ module InvoiceSources
 
     def connected?
       source.active? && source.external_account_id.present?
-    end
-
-    def requires_reauthorization?
-      !connected?
     end
 
     private

@@ -7,7 +7,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_url(script_name: nil)
   end
 
-  test "index shows one actionable customer inbox" do
+  test "index shows receivables ordered by collection priority" do
     account = sign_up_and_complete
     source = create_invoice_source(account, provider: :xero)
     harbor = nil
@@ -30,45 +30,56 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Receivables"
     assert_select "#nav.app-nav[data-controller='toggle-class']"
     assert_select "#nav button[data-action='toggle-class#toggle'][aria-label='Toggle navigation']"
-    assert_select "#nav a[aria-current='page']", "Inbox"
+    assert_select "#nav a[aria-current='page']", "Receivables"
     assert_select "#main.app-main"
-    assert_select "[data-testid='attention-today-count']", text: "3 accounts"
-    assert_select "#customer-inbox-title", "Customer inbox"
     assert_select "table", count: 1
-    assert_select "#collection-priorities table thead th", count: 5
+    assert_select "#collection-priorities table thead th", count: 4
     assert_equal(
-      [ "Customer", "Segment", "Receivable", "Conversation", "Next move" ],
+      [ "Customer", "Receivable", "Payment summary", "Status" ],
       css_select("#collection-priorities table thead th").map { |heading| heading.text.squish }
     )
 
     customer_rows = css_select("#collection-priorities tbody tr")
     customer_names = customer_rows.map { |row| row.at_css("td[data-label='Customer'] a").text.squish }
-    assert_equal [ "Nat Dogre", "Brightside Studio", "Harbor & Co" ], customer_names.first(3)
-    assert_equal [ "Greenline Foods", "Northstar Consulting", "PixelCraft Labs", "Cedar Works" ], customer_names.drop(3)
+    assert_equal(
+      [ "Brightside Studio", "Harbor & Co", "Greenline Foods", "Northstar Consulting", "Nat Dogre", "PixelCraft Labs", "Cedar Works" ],
+      customer_names
+    )
 
-    nat_row, brightside_row, harbor_row = customer_rows.first(3)
-    assert_equal "reply", nat_row["data-conversation-state"]
-    assert_equal "new_high_value", nat_row["data-collection-segment"]
-    assert_includes nat_row.text, "Customer replied"
-    assert_includes nat_row.text, "Reply with payment details"
+    brightside_row, harbor_row, greenline_row, _, nat_row, _, cedar_row = customer_rows
+    assert_equal "waiting", nat_row["data-conversation-state"]
+    assert_includes nat_row.text, "New"
+    assert_includes nat_row.text, "Customer says payment is being processed"
+    assert_includes nat_row.text, "In progress"
+    assert_includes nat_row.text, "for 2 invoices"
 
     assert_equal "dispute", brightside_row["data-conversation-state"]
-    assert_equal "disputed", brightside_row["data-collection-segment"]
-    assert_includes brightside_row.text, "Dispute raised"
-    assert_includes brightside_row.text, "Review the dispute with the project owner"
+    assert_includes brightside_row.text, "Sometimes late"
+    assert_includes brightside_row.text, "Customer disputes the phase-two amount"
+    assert_includes brightside_row.text, "Needs attention"
 
     assert_equal "no_reply", harbor_row["data-conversation-state"]
-    assert_equal "unresponsive", harbor_row["data-collection-segment"]
-    assert_includes harbor_row.text, "No reply"
+    assert_includes harbor_row.text, "Unreliable payer"
     assert_includes harbor_row.text, "Escalate to a person"
+    assert_includes harbor_row.text, "Unpaid"
+
+    assert_includes greenline_row.text, "Slow payer"
+    assert_includes greenline_row.text, "Waiting for their reply"
+    assert_includes greenline_row.text, "In progress"
+
+    assert_includes cedar_row.text, "Paid in full"
+    assert_includes cedar_row.text, "No follow-up needed"
+    assert_includes cedar_row.text, "Paid"
 
     assert_select "#collection-priorities tbody .app-pill", count: 0
+    assert_select "#collection-priorities tbody .app-collection-status", count: 7
 
-    assert_select "a[href=?]", customer_path(Customers::Profile.to_param_for(harbor)), "Harbor & Co"
+    assert_select "a[href=?]", customer_path(customer_key_for(harbor)), "Harbor & Co"
     assert_select "body", { text: "Draft Test Customer", count: 0 }
     assert_select "form[action=?]", invoice_source_refresh_path(source), count: 0
-    assert_select "#invoice-overview, .app-aging-chart, .app-kpi-strip, .app-segmented-control", count: 0
-    assert_select "[data-testid='expected-next-30-days'], [data-testid^='aging-'], [data-testid='paid-this-month-total']", count: 0
+    assert_select "#aging-breakdown-title", "Breakdown of outstanding receivables"
+    assert_select ".app-aging-chart", count: 1
+    assert_select "[data-testid^='aging-']", count: 5
   end
 
   test "index shows an empty state when no invoice source is connected" do
@@ -134,6 +145,10 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
         due_on: due_on,
         paid_on: paid_on
       )
+    end
+
+    def customer_key_for(invoice)
+      Customers::Profile.encode_identity(Customers::Profile.identity_for(invoice))
     end
 
     def sign_up_and_complete(email_address: "owner-receivables@example.com")

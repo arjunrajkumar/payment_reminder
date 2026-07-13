@@ -28,15 +28,14 @@ class Account::ExternalIdSequenceTest < ActiveSupport::TestCase
     assert_equal 1, Account::ExternalIdSequence.count
   end
 
-  test "#value creates the first record if it does not exist yet" do
+  test "next creates the sequence record if it does not exist yet" do
     assert_nil Account::ExternalIdSequence.first
 
-    value = nil
+    next_value = nil
     assert_difference -> { Account::ExternalIdSequence.count }, 1 do
-      value = Account::ExternalIdSequence.value
+      next_value = Account::ExternalIdSequence.next
     end
 
-    assert_not_nil value
-    assert_equal value, Account::ExternalIdSequence.first.value
+    assert_equal next_value, Account::ExternalIdSequence.first.value
   end
 end

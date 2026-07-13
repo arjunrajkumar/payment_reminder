@@ -7,7 +7,6 @@ class MagicLink < ApplicationRecord
   enum :purpose, %w[sign_in sign_up], prefix: :for, default: :sign_in
 
   scope :active, -> { where(expires_at: Time.current...) }
-  scope :stale, -> { where(expires_at: ..Time.current) }
 
   before_validation :generate_code, on: :create
   before_validation :set_expiration, on: :create
@@ -17,10 +16,6 @@ class MagicLink < ApplicationRecord
   class << self
     def consume(code)
       active.find_by(code: Code.sanitize(code))&.consume
-    end
-
-    def cleanup
-      stale.delete_all
     end
   end
 

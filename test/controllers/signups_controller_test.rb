@@ -55,8 +55,8 @@ class SignupsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Owner's PaymentReminder", user.account.name
     assert_equal magic_link.identity, user.identity
     assert_predicate user, :owner?
-    assert_predicate user, :verified?
-    assert_predicate user.account.system_user, :system?
+    assert_predicate user.verified_at, :present?
+    assert_predicate user.account.users.find_by!(role: :system), :system?
   end
 
   test "verification code returns session token as json" do

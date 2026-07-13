@@ -7,10 +7,6 @@ class Account::ExternalIdSequence < ApplicationRecord
       end
     end
 
-    def value
-      first&.value || self.next
-    end
-
     private
       def with_lock
         transaction do

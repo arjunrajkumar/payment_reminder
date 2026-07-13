@@ -1,24 +1,25 @@
 require "application_system_test_case"
 
 class CoreFlowsTest < ApplicationSystemTestCase
-  test "signs up and reviews the customer inbox through account settings" do
+  test "signs up and reviews receivables through account settings" do
     sign_up
     account = Identity.find_by!(email_address: "system-flow@example.com").accounts.first
     create_invoice_history(account)
 
-    click_link "Inbox"
+    click_link "Receivables"
 
     assert_text "Receivables"
-    assert_text "Customer inbox"
     assert_text "Harbor & Co"
-    assert_selector "[data-testid='attention-today-count']", text: "1 account"
+    assert_text "No reply after three reminders. Escalate to a person."
+    assert_selector ".app-collection-status", text: "Unpaid"
 
     click_link "Harbor & Co", match: :first
 
-    assert_text "RECOMMENDED ACTION"
-    assert_text "Open invoices"
-    assert_text "Relationship intelligence"
-    assert_selector "[data-testid='customer-outstanding']", text: "USD 50,000"
+    assert_text "Customer segment: Unreliable payer"
+    assert_text "Payment summary"
+    assert_text "Invoice timing"
+    assert_text "Conversation"
+    assert_selector ".app-customer-summary__receivable", text: "USD 50,000 outstanding"
 
     click_link "Settings"
 

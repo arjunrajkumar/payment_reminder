@@ -18,6 +18,9 @@ module InvoiceSources
       assert_equal "acct_123", source.external_account_id
       assert_equal "acct_123", source.external_account_name
       assert_equal false, source.provider_data["livemode"]
+      assert_equal "acct_123", source.raw_token_data["stripe_user_id"]
+      refute source.raw_token_data.key?("access_token")
+      refute source.raw_token_data.key?("refresh_token")
       assert fake_client.exchange_code_called
     end
 

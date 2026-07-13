@@ -6,13 +6,6 @@
 <header class="app-page-header app-receivables-header app-receivables-header--compact">
   <div class="app-page-header__content">
     <h1 class="app-page-title">Receivables</h1>
-    <% if @invoice_sources.any? %>
-      <p class="app-page-subtitle app-receivables-header__sync">
-        <%= @invoice_sources.map { |source| source.external_account_name.presence || source.provider.titleize }.to_sentence %>
-        <span aria-hidden="true">·</span>
-        <%= link_to receivables_sync_status(@invoice_sources), account_settings_path, class: "app-status-link" %>
-      </p>
-    <% end %>
   </div>
 
   <time class="app-period-label" datetime="<%= @dashboard.as_of.iso8601 %>">As of <%= @dashboard.as_of.strftime("%b %-d, %Y") %></time>
@@ -49,38 +42,26 @@
   </section>
 <% else %>
   <% inbox_customers = customer_inbox_customers(@inbox_customers) %>
-  <% needs_attention_count = inbox_customers.count { |customer| communication_preview_for(customer).fetch(:needs_attention) } %>
 
-  <p class="app-home-summary-line" aria-label="Customer inbox summary">
-    <strong data-testid="attention-today-count"><%= pluralize(needs_attention_count, "account") %></strong>
-    <%= needs_attention_count == 1 ? "needs" : "need" %> you now
-    <span aria-hidden="true">·</span>
-    <span><%= pluralize(inbox_customers.size, "customer") %> in the inbox</span>
-  </p>
-
-  <section class="app-invoice-section app-customer-portfolio app-customer-inbox" id="collection-priorities" aria-labelledby="customer-inbox-title">
-    <header class="app-section-header">
-      <h2 id="customer-inbox-title">Customer inbox</h2>
-      <span aria-label="<%= pluralize(inbox_customers.size, "customer") %>"><%= inbox_customers.size %></span>
-    </header>
-
+  <section class="app-customer-inbox" id="collection-priorities">
     <div class="app-card app-table-card">
       <div class="app-table-wrap">
         <table class="app-data-table app-customer-table app-customer-inbox__table">
           <thead>
             <tr>
               <th scope="col">Customer</th>
-              <th scope="col">Segment</th>
               <th scope="col">Receivable</th>
-              <th scope="col">Conversation</th>
-              <th scope="col">Next move</th>
+              <th scope="col">Payment summary</th>
+              <th scope="col">Status</th>
             </tr>
           </thead>
-          <tbody class="app-customer-list">
+          <tbody>
             <%= render partial: "customers/inbox_row", collection: inbox_customers, as: :customer %>
           </tbody>
         </table>
       </div>
     </div>
   </section>
+
+  <%= render "receivables/aging_breakdown", dashboard: @dashboard %>
 <% end %>

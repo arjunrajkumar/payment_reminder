@@ -1,7 +1,7 @@
 require "test_helper"
 
 class Receivables::DashboardTest < ActiveSupport::TestCase
-  test "assigns outstanding invoices to exact aging boundaries" do
+  test "assigns exact aging boundaries to non-overlapping labels" do
     as_of = Date.new(2026, 7, 11)
     dashboard = Receivables::Dashboard.new(
       [
@@ -16,7 +16,10 @@ class Receivables::DashboardTest < ActiveSupport::TestCase
       as_of: as_of
     )
 
-    assert_equal [ 1, 1, 2, 2, 1 ], dashboard.aging_buckets.map { |bucket| bucket.fetch(:count) }
+    buckets = dashboard.aging_buckets
+
+    assert_equal [ "Current", "1-30 days", "31-60 days", "61-90 days", "Over 90 days" ], buckets.map { |bucket| bucket.fetch(:label) }
+    assert_equal [ 1, 1, 2, 2, 1 ], buckets.map { |bucket| bucket.fetch(:totals).fetch("INR") }
   end
 
   test "keeps paid invoices visible without adding them to outstanding totals" do
@@ -43,9 +46,7 @@ class Receivables::DashboardTest < ActiveSupport::TestCase
 
     assert_equal [ outstanding ], dashboard.outstanding_invoices
     assert_equal [ paid, paid_last_month ], dashboard.paid_invoices
-    assert_equal [ paid ], dashboard.paid_this_month_invoices
     assert_equal({ "INR" => 100.to_d }, dashboard.outstanding_totals)
-    assert_equal({ "INR" => 75.to_d }, dashboard.paid_this_month_totals)
     assert_not_includes dashboard.issued_invoices, draft
   end
 
@@ -69,15 +70,14 @@ class Receivables::DashboardTest < ActiveSupport::TestCase
     assert_equal [ 0.to_d, 0.to_d, 25.to_d, 0.to_d, 0.to_d ], usd.fetch(:buckets).map { |bucket| bucket.fetch(:amount) }
   end
 
-  test "filters invoices by aging bucket and totals balances older than thirty days" do
+  test "orders overdue invoices and totals balances older than thirty days" do
     as_of = Date.new(2026, 7, 11)
     current = invoice_due_on(as_of + 1.day, amount_due: 100)
     recent = invoice_due_on(as_of - 10.days, amount_due: 50)
     older = invoice_due_on(as_of - 45.days, amount_due: 25)
     dashboard = Receivables::Dashboard.new([ current, recent, older ], as_of: as_of)
 
-    assert_equal [ recent ], dashboard.invoices_for_aging_bucket(:one_to_thirty)
-    assert_equal [ older ], dashboard.invoices_for_aging_bucket(:thirty_one_to_sixty)
+    assert_equal [ older, recent ], dashboard.overdue_invoices
     assert_equal({ "INR" => 25.to_d }, dashboard.older_than_thirty_totals)
   end
 

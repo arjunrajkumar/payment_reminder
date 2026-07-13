@@ -13,7 +13,7 @@ Read this file before editing PaymentReminder.
 
 - Ruby 3.4.5
 - Rails 8
-- SQLite
+- MySQL 8
 - Hotwire: Turbo and Stimulus
 - Importmap for JavaScript
 - Propshaft for assets

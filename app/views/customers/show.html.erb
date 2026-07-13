@@ -1,123 +1,93 @@
 <% @page_title = @customer.name %>
 <% @body_class = "app-workspace" %>
-<% recommendation = @customer.reminder_recommendation %>
-<% featured_invoice = @customer.next_expected_invoice %>
-<% payment_events = @customer.payment_history_events %>
 <% communication = communication_preview_for(@customer) %>
-<% contact_email = communication_contact_email(@customer) %>
 <% communication_thread = communication_thread_for(@customer) %>
-<% collection_segment = collection_segment_for(@customer) %>
+<% payer_profile = payer_profile_for(@customer) %>
+<% collection_status = collection_status_for(@customer, preview: communication) %>
+<% timing_events = @customer.invoice_timing_events %>
+<% outstanding_invoice_count = @customer.outstanding_invoices.size %>
 
 <%= render "receivables/nav", active: :home %>
 
 <nav class="app-breadcrumb app-customer-breadcrumb" aria-label="Breadcrumb">
-  <%= link_to "Inbox", home_path %>
+  <%= link_to "Receivables", home_path %>
   <span aria-hidden="true">/</span>
   <span aria-current="page"><%= @customer.name %></span>
 </nav>
 
 <header class="app-customer-header">
-  <div class="app-customer-identity">
+  <div>
     <h1 class="app-page-title"><%= @customer.name %></h1>
-    <p class="app-page-subtitle">
-      <%= @customer.invoice_source.provider.titleize %> customer
-      <span aria-hidden="true">·</span>
-      <%= receivables_sync_status([ @customer.invoice_source ]) %>
-    </p>
+    <p class="app-page-subtitle">Customer segment: <%= payer_profile.fetch(:name) %></p>
   </div>
+
+  <span class="app-collection-status app-collection-status--<%= collection_status.fetch(:tone) %>"><%= collection_status.fetch(:label) %></span>
 </header>
 
-<section class="app-customer-action-band" data-testid="customer-recommendation" aria-labelledby="customer-action-title">
-  <div class="app-customer-action-band__content">
-    <span class="app-section-eyebrow">Recommended action</span>
-    <h2 id="customer-action-title"><%= communication.fetch(:next_step) %></h2>
-    <span class="app-customer-action-band__context" hidden><%= customer_action_title(@customer) %> · <%= recommendation.fetch(:name) %></span>
-  </div>
+<section class="app-card app-customer-summary" aria-labelledby="payment-summary-title">
+  <h2 id="payment-summary-title" class="app-card__title">Payment summary</h2>
+  <p class="app-customer-summary__copy"><%= communication.fetch(:summary) %></p>
 
-  <div class="app-customer-action-band__next">
-    <span class="app-section-eyebrow">Next touch</span>
-    <strong class="app-customer-action-band__date"><%= communication.fetch(:next_touch, nil).presence || customer_planned_touch_label(@customer) %></strong>
-
-    <% if featured_invoice && contact_email.blank? %>
-      <div id="contact-readiness" class="app-contact-readiness app-contact-readiness--amber" role="status">
-        <span>Billing contact required</span>
-        <strong>No email was provided by <%= @customer.invoice_source.provider.titleize %>.</strong>
-      </div>
-    <% elsif featured_invoice %>
-      <% if communication.fetch(:state) == :scheduled %>
-        <%= link_to communication.fetch(:action_label), "#suggested-message", class: "app-primary-button app-customer-action-band__action", data: { controller: "reveal", action: "reveal#open" } %>
-      <% else %>
-        <%= link_to communication.fetch(:action_label), "#conversation", class: "app-primary-button app-customer-action-band__action" %>
-      <% end %>
+  <div class="app-customer-summary__receivable" aria-label="Receivable context">
+    <% if outstanding_invoice_count.positive? %>
+      <strong><%= receivable_totals(@customer.outstanding_totals, qualifier: "outstanding") %></strong>
+      <span aria-hidden="true">·</span>
+      <span><%= pluralize(outstanding_invoice_count, "invoice") %></span>
+      <span aria-hidden="true">·</span>
+      <span>
+        <% if @customer.oldest_overdue_days %>
+          <%= pluralize(@customer.oldest_overdue_days, "day") %> overdue
+        <% else %>
+          <%= customer_invoice_due_context(@customer.next_expected_invoice, as_of: @customer.as_of) %>
+        <% end %>
+      </span>
     <% else %>
-      <%= link_to "View invoice history", "#customer-invoices", class: "app-secondary-button app-customer-action-band__action", data: { controller: "reveal", action: "reveal#open" } %>
+      <strong>Paid in full</strong>
+      <span aria-hidden="true">·</span>
+      <span>No collection due</span>
     <% end %>
   </div>
 </section>
 
-<section class="app-card app-open-invoices app-customer-primary-invoice" id="open-invoices" aria-labelledby="open-invoices-title">
-  <header class="app-card-section-header">
-    <h2 id="open-invoices-title" class="app-card__title">Open invoices</h2>
+<section class="app-card app-payment-history" aria-labelledby="payment-pattern-title">
+  <header>
+    <h2 id="payment-pattern-title" class="app-card__title">Invoice timing</h2>
   </header>
 
-  <% if featured_invoice %>
-    <article class="app-open-invoice" id="open-invoice-<%= featured_invoice.id %>">
-      <div class="app-open-invoice__header">
-        <div>
-          <span>Invoice</span>
-          <strong><%= featured_invoice.number.presence || featured_invoice.external_id %></strong>
-        </div>
-        <div class="app-open-invoice__status">
-          <span><%= customer_invoice_due_context(featured_invoice, as_of: @customer.as_of) %></span>
-        </div>
-      </div>
+  <% if timing_events.any? %>
+    <div class="app-payment-scale" aria-hidden="true">
+      <span>30 days early</span>
+      <span>Due date</span>
+      <span>30 days late</span>
+    </div>
 
-      <dl class="app-open-invoice__metrics">
-        <div>
-          <dt>Balance</dt>
-          <dd data-testid="customer-outstanding"><%= receivable_amount(featured_invoice.amount_due, featured_invoice.currency) %></dd>
+    <div class="app-payment-events">
+      <% timing_events.each do |event| %>
+        <% invoice = event.fetch(:invoice) %>
+        <div class="app-payment-event" data-testid="payment-history-event">
+          <div class="app-payment-event__invoice">
+            <strong><%= invoice.number.presence || invoice.external_id %></strong>
+            <% if event.fetch(:paid) && invoice.paid_on.blank? %>
+              <span>Paid</span>
+            <% else %>
+              <span><%= event.fetch(:paid) ? "Paid" : "Due" %> <%= customer_invoice_date(event.fetch(:paid) ? invoice.paid_on : invoice.due_on) %></span>
+            <% end %>
+          </div>
+          <div class="app-payment-event__track" aria-hidden="true">
+            <span class="app-payment-event__due-line"></span>
+            <% if event.fetch(:position) %>
+              <span class="app-payment-event__marker app-payment-event__marker--<%= customer_invoice_timing_tone(event) %>" style="--payment-position: <%= event.fetch(:position) %>%"></span>
+            <% end %>
+          </div>
+          <div class="app-payment-event__timing">
+            <strong><%= customer_invoice_timing_label(event) %></strong>
+          </div>
         </div>
-        <div>
-          <dt>Due date</dt>
-          <dd><%= customer_invoice_date(featured_invoice.due_on) %></dd>
-        </div>
-        <div>
-          <dt>Estimated payment</dt>
-          <dd data-testid="customer-expected-collection"><%= customer_expected_window_label(@customer, featured_invoice) %></dd>
-        </div>
-      </dl>
-
-      <div class="app-open-invoice__forecast" aria-label="Forecast confidence and exceptions">
-        <span class="app-confidence-text app-confidence-text--<%= customer_forecast_confidence_tone(@customer, featured_invoice) %>"><%= customer_forecast_confidence_label(@customer, featured_invoice) %></span>
-        <% if @customer.unusual_payment_dates.any? %>
-          <span class="app-inline-exception"><%= pluralize(@customer.unusual_payment_dates.size, "payment") %> excluded from this estimate</span>
-        <% end %>
-      </div>
-    </article>
+      <% end %>
+    </div>
   <% else %>
-    <div class="app-empty-inline">This customer has no outstanding invoices.</div>
+    <div class="app-empty-inline app-payment-history__empty">Invoice timing will appear when an invoice has a due date.</div>
   <% end %>
-</section>
-
-<section class="app-customer-facts" aria-labelledby="relationship-intelligence-title">
-  <header class="app-customer-facts__header">
-    <h2 id="relationship-intelligence-title">Relationship intelligence</h2>
-  </header>
-
-  <dl class="app-customer-facts__grid">
-    <div class="app-customer-fact">
-      <dt>On-time payment rate</dt>
-      <dd data-testid="customer-on-time-rate"><%= @customer.on_time_rate ? "#{@customer.on_time_rate}%" : "Not enough history" %></dd>
-    </div>
-    <div class="app-customer-fact">
-      <dt>Typical payment timing</dt>
-      <dd data-testid="customer-payment-timing"><%= customer_payment_timing(@customer) %></dd>
-    </div>
-    <div class="app-customer-fact">
-      <dt>Total billed in synced history</dt>
-      <dd data-testid="customer-total-billed"><%= receivable_totals(@customer.total_billed_totals) %></dd>
-    </div>
-  </dl>
 </section>
 
 <section id="conversation" class="app-card app-conversation" aria-labelledby="conversation-title">
@@ -126,211 +96,21 @@
     <strong class="app-customer-card__conversation-state app-customer-card__conversation-state--<%= communication.fetch(:tone) %>"><%= communication.fetch(:status) %></strong>
   </header>
 
-  <ol class="app-conversation-thread" aria-label="Conversation events">
-    <% communication_thread.each do |event| %>
-      <% event_kind_label = { incoming: "Incoming", outgoing: "Outgoing", system: "System", scheduled: "Scheduled" }.fetch(event.fetch(:kind)) { event.fetch(:kind).to_s.humanize } %>
-      <li class="app-conversation-event app-conversation-event--<%= event.fetch(:kind) %>">
-        <div class="app-conversation-event__meta">
-          <span class="app-conversation-event__kind"><%= event_kind_label %></span>
-          <strong><%= event.fetch(:label) %></strong>
-          <span><%= event.fetch(:timestamp) %></span>
-        </div>
-        <p><%= event.fetch(:body) %></p>
-      </li>
-    <% end %>
-  </ol>
-</section>
-
-<div class="app-customer-disclosures">
-  <details class="app-disclosure app-customer-recommendation-details">
-    <summary class="app-disclosure__summary">
-      <span>Why this recommendation?</span>
-      <span><%= collection_segment.fetch(:name) %></span>
-    </summary>
-    <div class="app-disclosure__content">
-      <dl class="app-recommendation-facts">
-        <div>
-          <dt>Collection segment</dt>
-          <dd><%= collection_segment.fetch(:name) %></dd>
-        </div>
-        <div>
-          <dt>Reply style</dt>
-          <dd><%= collection_segment.fetch(:reply_tone) %></dd>
-        </div>
-        <div>
-          <dt>Cadence</dt>
-          <dd><%= collection_segment.fetch(:cadence) %></dd>
-        </div>
-      </dl>
-      <p><strong>Why this policy:</strong> <%= collection_segment.fetch(:rationale) %>.</p>
-      <p><strong>Financial recommendation:</strong> <%= recommendation.fetch(:reason) %></p>
-      <p class="app-disclosure__note"><%= customer_action_why(@customer) %></p>
-    </div>
-  </details>
-
-  <% if featured_invoice %>
-    <details id="suggested-message" class="app-disclosure app-suggested-message">
-      <summary class="app-disclosure__summary">
-        <span><%= communication.fetch(:state) == :scheduled ? "Review scheduled message" : "Preview suggested message" %></span>
-        <span>
-          <% if communication.fetch(:state) == :scheduled %>
-            Scheduled · <%= communication.fetch(:timestamp) %>
-          <% else %>
-            Draft
-          <% end %>
-        </span>
-      </summary>
-      <div class="app-disclosure__content app-suggested-message__content">
-        <% suggested_message_body = ([ "Hello," ] + customer_suggested_message_paragraphs(@customer, featured_invoice) + [ "Thank you," ]).join("\n\n") %>
-        <p id="message-composer-note" class="app-disclosure__note">
-          <% if communication.fetch(:state) == :scheduled %>
-            Scheduled for <%= communication.fetch(:timestamp) %>. It will send only if the invoice is still open.
-          <% else %>
-            Review the recipient and message before sending or scheduling.
-          <% end %>
-        </p>
-
-        <div class="app-message-composer" aria-describedby="message-composer-note">
-          <label class="app-message-composer__field" for="customer-message-to">
-            <span>To</span>
-            <input id="customer-message-to" type="email" value="<%= contact_email %>" placeholder="Billing contact needed" autocomplete="email">
-          </label>
-
-          <label class="app-message-composer__field" for="customer-message-subject">
-            <span>Subject</span>
-            <input id="customer-message-subject" type="text" value="<%= customer_suggested_message_subject(@customer, featured_invoice) %>">
-          </label>
-
-          <label class="app-message-composer__field app-message-composer__field--body" for="customer-message-body">
-            <span>Message</span>
-            <textarea id="customer-message-body" rows="8"><%= suggested_message_body %></textarea>
-          </label>
-
-          <div class="app-message-composer__actions">
-            <button type="button" class="app-primary-button">Send email</button>
-            <button type="button" class="app-secondary-button">Schedule</button>
+  <% if communication_thread.any? %>
+    <ol class="app-conversation-thread" aria-label="Conversation events">
+      <% communication_thread.each do |event| %>
+        <% event_kind_label = { incoming: "Incoming", outgoing: "Outgoing", system: "System", scheduled: "Scheduled" }.fetch(event.fetch(:kind)) { event.fetch(:kind).to_s.humanize } %>
+        <li class="app-conversation-event app-conversation-event--<%= event.fetch(:kind) %>">
+          <div class="app-conversation-event__meta">
+            <span class="app-conversation-event__kind"><%= event_kind_label %></span>
+            <strong><%= event.fetch(:label) %></strong>
+            <span><%= event.fetch(:timestamp) %></span>
           </div>
-        </div>
-
-        <p class="app-disclosure__note"><strong><%= collection_segment.fetch(:name) %>:</strong> <%= collection_segment.fetch(:reply_tone) %> replies · <%= collection_segment.fetch(:cadence) %> cadence</p>
-      </div>
-    </details>
+          <p><%= event.fetch(:body) %></p>
+        </li>
+      <% end %>
+    </ol>
+  <% else %>
+    <div class="app-empty-inline"><%= communication.fetch(:activity).description %></div>
   <% end %>
-
-  <details class="app-disclosure app-payment-evidence">
-    <summary class="app-disclosure__summary">
-      <span>Payment evidence</span>
-      <span>
-        <%= featured_invoice ? customer_forecast_confidence_label(@customer, featured_invoice) : "No estimate" %>
-      </span>
-    </summary>
-    <div class="app-disclosure__content">
-      <% if featured_invoice %>
-        <section class="app-payment-evidence__forecast" aria-labelledby="forecast-evidence-title">
-          <div>
-            <span class="app-section-eyebrow">Estimated payment</span>
-            <h2 id="forecast-evidence-title"><%= customer_expected_window_label(@customer, featured_invoice) %></h2>
-          </div>
-          <span class="app-pill app-pill--<%= customer_forecast_confidence_tone(@customer, featured_invoice) %>"><%= customer_forecast_confidence_label(@customer, featured_invoice) %></span>
-          <p><%= customer_forecast_explanation(@customer, featured_invoice) %></p>
-        </section>
-      <% end %>
-
-      <% if @customer.unusual_payment_dates.any? %>
-        <section class="app-data-quality-warning" data-testid="data-quality-warning" aria-labelledby="data-quality-title">
-          <div>
-            <h2 id="data-quality-title"><%= pluralize(@customer.unusual_payment_dates.size, "payment") %> excluded from forecasting</h2>
-            <% @customer.unusual_payment_dates.each do |invoice| %>
-              <p><%= customer_data_quality_description(invoice) %> Review the source date before relying on it.</p>
-            <% end %>
-          </div>
-          <%= link_to "View invoice", "#invoice-#{@customer.unusual_payment_dates.first.id}", class: "app-secondary-button" %>
-        </section>
-      <% end %>
-
-      <section class="app-payment-history" aria-labelledby="payment-pattern-title">
-        <header class="app-payment-history__header">
-          <div>
-            <h2 id="payment-pattern-title" class="app-card__title">Recent payment pattern</h2>
-            <p>Comparable payment timing relative to each invoice due date.</p>
-          </div>
-        </header>
-
-        <% if payment_events.any? %>
-          <div class="app-payment-scale" aria-hidden="true">
-            <span>30 days early</span>
-            <span>Due date</span>
-            <span>30 days late</span>
-          </div>
-
-          <div class="app-payment-events">
-            <% payment_events.each do |event| %>
-              <% invoice = event.fetch(:invoice) %>
-              <div class="app-payment-event" data-testid="payment-history-event">
-                <div class="app-payment-event__invoice">
-                  <strong><%= invoice.number.presence || invoice.external_id %></strong>
-                  <span>Paid <%= customer_invoice_date(invoice.paid_on) %></span>
-                </div>
-                <div class="app-payment-event__track" aria-hidden="true">
-                  <span class="app-payment-event__due-line"></span>
-                  <span class="app-payment-event__marker app-payment-event__marker--<%= customer_payment_event_tone(event) %>" style="--payment-position: <%= event.fetch(:position) %>%"></span>
-                </div>
-                <div class="app-payment-event__timing">
-                  <strong><%= customer_payment_event_label(event) %></strong>
-                </div>
-              </div>
-            <% end %>
-          </div>
-        <% else %>
-          <div class="app-empty-inline app-payment-history__empty">Payment timing will appear after a paid invoice with valid due and payment dates is synced.</div>
-        <% end %>
-      </section>
-    </div>
-  </details>
-
-  <details id="customer-invoices" class="app-disclosure app-invoice-history">
-    <summary class="app-disclosure__summary">
-      <span>Invoice history</span>
-      <span><%= pluralize(@customer.invoice_count, "invoice") %></span>
-    </summary>
-    <div class="app-disclosure__content app-disclosure__content--flush">
-      <div class="app-table-wrap">
-        <table class="app-data-table app-customer-history-table">
-          <thead>
-            <tr>
-              <th scope="col">Invoice</th>
-              <th scope="col">Issued</th>
-              <th scope="col">Due</th>
-              <th scope="col">Estimated</th>
-              <th scope="col">Paid</th>
-              <th scope="col">Total</th>
-              <th scope="col">Balance</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% @customer.invoices.each do |invoice| %>
-              <% invoice_status = customer_invoice_status(invoice, as_of: @customer.as_of) %>
-              <% unusual_date = @customer.unusual_payment_dates.include?(invoice) %>
-              <tr id="invoice-<%= invoice.id %>">
-                <th scope="row" data-label="Invoice"><%= invoice.number.presence || invoice.external_id %></th>
-                <td data-label="Issued" class="app-data-table__muted"><%= customer_invoice_date(invoice.issued_on) %></td>
-                <td data-label="Due" class="app-data-table__muted"><%= customer_invoice_date(invoice.due_on) %></td>
-                <td data-label="Estimated" class="app-data-table__muted"><%= customer_invoice_expected_date(@customer, invoice) %></td>
-                <td data-label="Paid" class="app-data-table__muted"><%= customer_invoice_date(invoice.paid_on) %></td>
-                <td data-label="Total"><%= receivable_amount(invoice.total, invoice.currency) %></td>
-                <td data-label="Balance"><%= receivable_amount(invoice.amount_due, invoice.currency) %></td>
-                <td data-label="Status">
-                  <div class="app-invoice-statuses">
-                    <span class="app-pill app-pill--<%= invoice_status.fetch(:tone) %>"><%= invoice_status.fetch(:label) %></span>
-                    <% if unusual_date %><span class="app-pill app-pill--amber">Check data</span><% end %>
-                  </div>
-                </td>
-              </tr>
-            <% end %>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </details>
-</div>
+</section>

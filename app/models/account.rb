@@ -9,19 +9,17 @@ class Account < ApplicationRecord
 
   class << self
     def create_with_owner(account:, owner:)
-      create!(**account).tap do |account|
-        account.users.create!(role: :system, name: "System")
-        account.users.create!(**owner.with_defaults(role: :owner, verified_at: Time.current))
+      transaction do
+        create!(**account).tap do |account|
+          account.users.create!(role: :system, name: "System")
+          account.users.create!(**owner.with_defaults(role: :owner, verified_at: Time.current))
+        end
       end
     end
   end
 
   def slug
     "/#{AccountSlug.encode(external_account_id)}"
-  end
-
-  def system_user
-    users.find_by!(role: :system)
   end
 
   def active?

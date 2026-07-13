@@ -12,7 +12,5 @@ class Account::SettingsController < ApplicationController
 
     def set_settings_dashboard
       @invoice_sources = InvoiceSource.available_sources_for(@account)
-      @billing_email = Current.user.identity&.email_address
-      @currency = @account.invoices.where.not(currency: nil).order(updated_at: :desc).pick(:currency).presence || "USD"
     end
 end

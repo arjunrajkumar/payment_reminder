@@ -28,7 +28,7 @@ module InvoiceSources
           token_type: token_set.fetch("token_type", "Bearer"),
           connections: connections
         },
-        raw_token_data: token_set,
+        raw_token_data: InvoiceSource.sanitized_token_data(token_set),
         last_error: nil
       )
 
@@ -49,10 +49,6 @@ module InvoiceSources
       source.active? && source.external_account_id.present? && source.refresh_token.present?
     end
 
-    def requires_reauthorization?
-      !connected?
-    end
-
     def refresh_access_token!
       token_set = oauth_client.refresh_token(refresh_token: source.refresh_token)
 
@@ -61,7 +57,7 @@ module InvoiceSources
         refresh_token: token_set.fetch("refresh_token"),
         expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
         scopes: token_set["scope"].present? ? token_set["scope"].to_s.split : source.scopes,
-        raw_token_data: token_set,
+        raw_token_data: InvoiceSource.sanitized_token_data(token_set),
         status: :active,
         last_error: nil
       )

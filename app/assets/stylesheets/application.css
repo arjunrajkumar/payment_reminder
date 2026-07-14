@@ -1,14 +1,8 @@
 @import url("font-face.css");
 
 /*
- * This is a manifest file that'll be compiled into application.css.
- *
- * With Propshaft, assets are served efficiently without preprocessing steps. You can still include
- * application-wide styles in this file, but keep in mind that CSS precedence will follow the standard
- * cascading order, meaning styles declared later in the document or manifest will override earlier ones,
- * depending on specificity.
- *
- * Consider organizing styles into separate files for maintainability.
+ * PaymentReminder application styles.
+ * Authenticated product rules are scoped to .app-workspace.
  */
 
 :root {
@@ -37,10 +31,6 @@ body {
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-}
-
-body.app-workspace {
-  --font-heading: var(--font-sans);
 }
 
 body.public {
@@ -265,6 +255,8 @@ body.public {
   font-weight: 700;
   letter-spacing: 0.08em;
 }
+
+/* Authenticated PaymentReminder product workspace styles. */
 
 .app-workspace #global-container,
 .app-workspace #global-container * {
@@ -890,5 +882,768 @@ body.public {
   .app-payment-event {
     grid-template-areas: "invoice track timing";
     grid-template-columns: 10rem minmax(12rem, 1fr) 8rem;
+  }
+}
+
+/* Product workspace presentation. */
+body.app-workspace {
+  --font-heading: var(--font-sans);
+  --color-canvas: #f7f8fb;
+  --color-surface: #ffffff;
+  --color-nav: #ffffff;
+  --color-text: #111827;
+  --color-text-soft: #101828;
+  --color-text-muted: #667085;
+  --color-border-strong: #d8dde7;
+  --color-card-border: #e2e6ee;
+  --color-row-border: #e8ebf1;
+  --color-table-head: #f8f9fb;
+  --color-accent: #315bea;
+  --color-accent-dark: #2447c6;
+  --color-accent-soft: #edf2ff;
+  --radius-card: 0.875rem;
+  --radius-control: 0.625rem;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.04);
+  background: var(--color-canvas);
+}
+
+.app-workspace #global-container {
+  background: var(--color-canvas);
+}
+
+.app-workspace .app-main {
+  background: var(--color-canvas);
+  padding: 1.25rem;
+}
+
+.app-workspace .app-main > * {
+  width: min(100%, 88rem);
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.app-workspace .app-skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  border-radius: 0.5rem;
+  background: var(--color-text-soft);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 650;
+  padding: 0.75rem 1rem;
+  text-decoration: none;
+  transform: translateY(-180%);
+  transition: transform 0.15s ease;
+}
+
+.app-workspace .app-skip-link:focus {
+  transform: translateY(0);
+}
+
+.app-workspace #nav {
+  background: #ffffff;
+  border-color: var(--color-card-border);
+  box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
+}
+
+.app-workspace .app-logo svg {
+  filter: saturate(1.08);
+}
+
+.app-workspace .app-nav-item {
+  min-height: 2.75rem;
+  border-radius: 0.625rem;
+  color: #475467;
+  font-weight: 550;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.app-workspace .app-nav-item:hover {
+  background: #f5f7fb;
+  color: var(--color-text-soft);
+  transform: translateX(0.125rem);
+}
+
+.app-workspace .app-nav-item--active {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: 650;
+}
+
+.app-workspace .app-icon-button {
+  border-color: var(--color-card-border);
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+}
+
+.app-workspace .app-icon-button:hover {
+  border-color: #b8c5ea;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.app-workspace a:focus-visible,
+.app-workspace button:focus-visible,
+.app-workspace [tabindex]:focus-visible {
+  outline: 3px solid rgba(49, 91, 234, 0.28);
+  outline-offset: 3px;
+}
+
+.app-workspace .app-page-header {
+  align-items: flex-end;
+  margin-bottom: 1.5rem;
+}
+
+.app-workspace .app-page-header__content {
+  min-width: 0;
+}
+
+.app-workspace .app-page-title {
+  color: var(--color-text-soft);
+  font-size: clamp(1.75rem, 3vw, 2.375rem);
+  font-weight: 720;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.app-workspace .app-page-subtitle {
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
+}
+
+.app-workspace .app-period-label {
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  box-shadow: none;
+  font-weight: 550;
+  padding: 0;
+}
+
+.app-workspace .app-card,
+.app-workspace .app-table-card {
+  border-color: var(--color-card-border);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.app-workspace .app-primary-button,
+.app-workspace .app-secondary-button {
+  min-height: 2.75rem;
+  border-radius: 0.625rem;
+  font-weight: 650;
+  padding: 0.6875rem 1rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.app-workspace .app-primary-button {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12), 0 6px 16px rgba(49, 91, 234, 0.2);
+}
+
+.app-workspace .app-primary-button:hover {
+  border-color: var(--color-accent-dark);
+  background: var(--color-accent-dark);
+  box-shadow: 0 2px 4px rgba(16, 24, 40, 0.12), 0 8px 20px rgba(49, 91, 234, 0.22);
+  transform: translateY(-1px);
+}
+
+.app-workspace .app-secondary-button {
+  border-color: var(--color-border-strong);
+  background: #ffffff;
+}
+
+.app-workspace .app-secondary-button:hover {
+  border-color: #aab4c8;
+  background: #f8f9fc;
+  transform: translateY(-1px);
+}
+
+/* Quiet, flat status language. */
+.app-workspace .app-pill {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: #f2f4f7;
+  box-shadow: none;
+  color: #475467;
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1rem;
+  padding: 0.3rem 0.65rem;
+}
+
+.app-workspace .app-pill--green {
+  border-color: #b7e2c1;
+  background: #ecf9ef;
+  color: #23693b;
+}
+
+.app-workspace .app-pill--slate {
+  border-color: #d6dbe5;
+  background: #f3f5f8;
+  color: #475467;
+}
+
+/* Customer inbox table. */
+.app-workspace .app-customer-inbox {
+  margin-top: 1rem;
+}
+
+.app-workspace .app-customer-inbox .app-table-card {
+  margin-top: 0;
+  background: var(--color-surface);
+  box-shadow: none;
+}
+
+.app-workspace .app-customer-inbox__table thead tr {
+  border-bottom-color: var(--color-row-border);
+  background: var(--color-surface);
+  color: #344054;
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.app-workspace .app-customer-table th,
+.app-workspace .app-customer-table td {
+  padding: 0.875rem 1rem;
+  overflow-wrap: anywhere;
+}
+
+.app-workspace .app-customer-table th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-table td {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-table th:nth-child(1),
+.app-workspace .app-customer-table td:nth-child(1) {
+  width: 18%;
+}
+
+.app-workspace .app-customer-table th:nth-child(2),
+.app-workspace .app-customer-table td:nth-child(2) {
+  width: 15%;
+}
+
+.app-workspace .app-customer-table th:nth-child(3),
+.app-workspace .app-customer-table td:nth-child(3) {
+  width: 47%;
+}
+
+.app-workspace .app-customer-table th:nth-child(4),
+.app-workspace .app-customer-table td:nth-child(4) {
+  width: 20%;
+}
+
+.app-workspace .app-customer-card__identity .app-data-link {
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-card__identity-copy {
+  display: grid;
+  gap: 0.15rem;
+}
+
+/* Customer detail. */
+.app-workspace .app-customer-breadcrumb span[aria-current="page"] {
+  color: #344054;
+  font-weight: 600;
+}
+
+.app-workspace .app-customer-header {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.app-workspace .app-customer-header > .app-collection-status {
+  align-self: flex-start;
+  margin-left: auto;
+}
+
+.app-workspace .app-customer-summary .app-card__title,
+.app-workspace .app-payment-history .app-card__title,
+.app-workspace .app-conversation .app-card__title {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-summary {
+  margin-top: 1rem;
+  padding: 1.25rem;
+}
+
+.app-workspace .app-customer-summary__copy {
+  max-width: 52rem;
+  margin: 0.75rem 0 0;
+  color: var(--color-text-soft);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.3rem;
+}
+
+.app-workspace .app-customer-summary__receivable {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.45rem;
+  align-items: baseline;
+  margin-top: 1rem;
+  border-top: 1px solid var(--color-row-border);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  padding-top: 0.875rem;
+}
+
+.app-workspace .app-customer-summary__receivable strong {
+  color: var(--color-text-soft);
+  font-weight: 700;
+}
+
+.app-workspace .app-payment-history__empty {
+  margin-top: 1rem;
+}
+
+/* Minimal operating workspace shared by Home and customer detail. */
+.app-workspace .app-receivables-header,
+.app-workspace .app-customer-breadcrumb,
+.app-workspace .app-customer-header,
+.app-workspace .app-customer-summary,
+.app-workspace .app-payment-history,
+.app-workspace .app-conversation {
+  max-width: 72rem;
+}
+
+.app-workspace .app-receivables-header--compact {
+  margin-bottom: 0.5rem;
+}
+
+.app-workspace .app-payment-history {
+  margin-top: 1rem;
+  border-top: 0;
+  padding: 1.25rem;
+}
+
+.app-workspace .app-payment-history .app-payment-event__invoice strong,
+.app-workspace .app-payment-history .app-payment-event__timing strong,
+.app-workspace .app-conversation .app-customer-card__conversation-state {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-card__amount {
+  display: block;
+  color: var(--color-text-soft);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-card__payer-profile {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1rem;
+}
+
+.app-workspace .app-customer-card__collection-context {
+  margin-top: 0.35rem;
+}
+
+.app-workspace .app-collection-status {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+  padding: 0.4375rem 0.875rem;
+  white-space: nowrap;
+}
+
+.app-workspace .app-collection-status--in-progress {
+  border-color: #c7d5ff;
+  background: #eef3ff;
+  color: #2447c6;
+}
+
+.app-workspace .app-collection-status--needs-attention {
+  border-color: #efc48d;
+  background: #fff3e6;
+  color: #914c0c;
+}
+
+.app-workspace .app-collection-status--unpaid {
+  border-color: #f0b9bd;
+  background: #fff0f1;
+  color: #9b3039;
+}
+
+.app-workspace .app-collection-status--paid {
+  border-color: #b7e2c3;
+  background: #ecf9ef;
+  color: #23693b;
+}
+
+.app-workspace .app-collection-status--open,
+.app-workspace .app-collection-status--uncollectible {
+  border-color: #d0d5dd;
+  background: #f2f4f7;
+  color: #475467;
+}
+
+.app-workspace .app-customer-card__conversation-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #344054;
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-customer-card__conversation-state::before {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: #98a2b3;
+  content: "";
+  flex: 0 0 auto;
+}
+
+.app-workspace .app-customer-card__conversation-state--blue::before {
+  background: #4f6ee8;
+}
+
+.app-workspace .app-customer-card__conversation-state--red::before {
+  background: #e05d67;
+}
+
+.app-workspace .app-customer-card__conversation-state--amber::before {
+  background: #d69b25;
+}
+
+.app-workspace .app-customer-card__conversation-state--green::before {
+  background: #55a56f;
+}
+
+.app-workspace .app-customer-card__summary p {
+  margin: 0;
+  color: #344054;
+  font-size: 0.875rem;
+  line-height: 1.35rem;
+}
+
+.app-workspace .app-customer-inbox .app-table-note {
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1rem;
+}
+
+.app-workspace .app-customer-card__status {
+  vertical-align: middle;
+}
+
+/* Customer conversation: chronological events rather than chat bubbles. */
+.app-workspace .app-conversation {
+  margin-top: 1rem;
+  scroll-margin-top: 1.25rem;
+  padding: 1.25rem;
+}
+
+.app-workspace .app-conversation__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.app-workspace .app-conversation-thread {
+  position: relative;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-workspace .app-conversation-thread::before {
+  position: absolute;
+  top: 0.85rem;
+  bottom: 0.85rem;
+  left: 0.3rem;
+  width: 1px;
+  background: #dfe3ea;
+  content: "";
+}
+
+.app-workspace .app-conversation-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.3rem;
+  margin: 0;
+  border-top: 1px solid var(--color-row-border);
+  padding: 0.875rem 0 0.875rem 1.5rem;
+}
+
+.app-workspace .app-conversation-event:first-child {
+  border-top: 0;
+}
+
+.app-workspace .app-conversation-event::before {
+  position: absolute;
+  top: 1.05rem;
+  left: 0;
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #98a2b3;
+  box-shadow: 0 0 0 1px #cfd5df;
+  content: "";
+}
+
+.app-workspace .app-conversation-event--incoming::before {
+  background: var(--color-accent);
+  box-shadow: 0 0 0 1px #9fb5ff;
+}
+
+.app-workspace .app-conversation-event--outgoing::before {
+  background: #4c9b68;
+  box-shadow: 0 0 0 1px #a9d5b7;
+}
+
+.app-workspace .app-conversation-event--scheduled::before {
+  background: #7a5af8;
+  box-shadow: 0 0 0 1px #c6bafb;
+}
+
+.app-workspace .app-conversation-event__meta {
+  min-width: 0;
+}
+
+.app-workspace .app-conversation-event__meta span,
+.app-workspace .app-conversation-event__meta strong {
+  display: block;
+}
+
+.app-workspace .app-conversation-event__kind {
+  color: #667085;
+  font-size: 0.625rem;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  line-height: 0.9rem;
+  text-transform: uppercase;
+}
+
+.app-workspace .app-conversation-event--incoming .app-conversation-event__kind {
+  color: var(--color-accent-dark);
+}
+
+.app-workspace .app-conversation-event--outgoing .app-conversation-event__kind {
+  color: #317046;
+}
+
+.app-workspace .app-conversation-event--scheduled .app-conversation-event__kind {
+  color: #6941c6;
+}
+
+.app-workspace .app-conversation-event__meta strong {
+  margin-top: 0.125rem;
+  color: var(--color-text-soft);
+  font-size: 0.8125rem;
+  line-height: 1.15rem;
+}
+
+.app-workspace .app-conversation-event__meta span:last-child {
+  margin-top: 0.075rem;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
+.app-workspace .app-conversation-event > p {
+  margin: 0;
+  color: #344054;
+  font-size: 0.8125rem;
+  line-height: 1.35rem;
+}
+
+.app-workspace .app-conversation-event--incoming > p {
+  color: var(--color-text-soft);
+  font-weight: 540;
+}
+
+/* Keep the inbox as one scrollable table on narrow screens. */
+@media (max-width: 69.99rem) {
+  .app-workspace .app-customer-inbox .app-customer-table {
+    min-width: 48rem;
+  }
+
+  .app-workspace .app-customer-inbox .app-customer-table th,
+  .app-workspace .app-customer-inbox .app-customer-table td {
+    padding: 0.75rem;
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+    vertical-align: top;
+  }
+
+  .app-workspace .app-customer-inbox .app-customer-card__summary p {
+    font-size: 0.75rem;
+    line-height: 1.125rem;
+  }
+
+  .app-workspace .app-customer-inbox .app-collection-status {
+    min-height: 2rem;
+    font-size: 0.75rem;
+    line-height: 1rem;
+    padding: 0.4375rem 0.625rem;
+  }
+
+}
+
+@media (min-width: 70rem) {
+  .app-workspace .app-customer-inbox .app-customer-table th:nth-child(4),
+  .app-workspace .app-customer-inbox .app-customer-table td:nth-child(4) {
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+}
+
+@media (min-width: 40rem) {
+  .app-workspace .app-conversation-event {
+    grid-template-columns: minmax(9rem, 0.28fr) minmax(0, 1fr);
+    gap: 1rem;
+  }
+}
+
+/* Keep mobile navigation until there is enough room for both the rail and content. */
+@media (min-width: 40rem) and (max-width: 55.99rem) {
+  .app-workspace #global-container {
+    grid-template-areas:
+      "nav"
+      "main";
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .app-workspace #nav {
+    position: sticky;
+    top: 0;
+    width: auto;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-card-border);
+    padding: 0.75rem 1rem;
+  }
+
+  .app-workspace .app-mobile-nav-bar {
+    display: flex;
+  }
+
+  .app-workspace .app-logo--desktop {
+    display: none;
+  }
+
+  .app-workspace .app-nav-list {
+    display: none;
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--color-card-border);
+    padding-top: 0.75rem;
+  }
+
+  .app-workspace #nav.open .app-nav-list {
+    display: flex;
+  }
+}
+
+@media (min-width: 56rem) {
+  .app-workspace #global-container {
+    grid-template-areas: "nav main";
+    grid-template-columns: 14.5rem minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+
+  .app-workspace #nav {
+    position: sticky;
+    top: 0;
+    width: 14.5rem;
+    height: 100dvh;
+    border-right: 1px solid var(--color-card-border);
+    border-bottom: 0;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+
+  .app-workspace .app-mobile-nav-bar {
+    display: none;
+  }
+
+  .app-workspace .app-logo--desktop {
+    display: block;
+    margin-bottom: 1.75rem;
+    padding: 0.25rem 0.5rem 0;
+  }
+
+  .app-workspace .app-nav-list {
+    display: flex;
+    margin-top: 0;
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .app-workspace .app-main {
+    padding: 2rem;
+  }
+}
+
+@media (min-width: 90rem) {
+  .app-workspace .app-main {
+    padding: 2.5rem;
+  }
+}
+
+@media (max-width: 39.99rem) {
+  .app-workspace .app-page-header {
+    align-items: flex-start;
+  }
+
+  .app-workspace .app-period-label {
+    width: fit-content;
+  }
+
+  .app-workspace .app-customer-header {
+    align-items: flex-start;
+  }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-workspace *,
+  .app-workspace *::before,
+  .app-workspace *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

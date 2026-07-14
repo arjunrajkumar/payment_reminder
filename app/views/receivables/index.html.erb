@@ -8,7 +8,7 @@
     <h1 class="app-page-title">Receivables</h1>
   </div>
 
-  <time class="app-period-label" datetime="<%= @dashboard.as_of.iso8601 %>">As of <%= @dashboard.as_of.strftime("%b %-d, %Y") %></time>
+  <time class="app-period-label" datetime="<%= @as_of.iso8601 %>">As of <%= @as_of.strftime("%b %-d, %Y") %></time>
 </header>
 
 <% if @invoice_sources.none? %>
@@ -35,7 +35,7 @@
     <p>Open Settings to resync invoices from your connected source.</p>
     <%= link_to "Open Settings", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
   </section>
-<% elsif @dashboard.issued_invoices.none? %>
+<% elsif @inbox_customers.none? %>
   <section class="app-empty-state" data-testid="no-issued-invoices">
     <h2>No issued invoices yet</h2>
     <p>Draft, awaiting approval, deleted, and voided invoices are not included. Approve an invoice with your provider, then refresh.</p>
@@ -62,6 +62,4 @@
       </div>
     </div>
   </section>
-
-  <%= render "receivables/aging_breakdown", dashboard: @dashboard %>
 <% end %>

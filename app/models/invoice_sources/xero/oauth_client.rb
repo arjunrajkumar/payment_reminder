@@ -50,8 +50,11 @@ module InvoiceSources
         {}
       end
 
-      def invoices(access_token:, tenant_id:)
-        get_json(config.invoices_uri, access_token: access_token, tenant_id: tenant_id)
+      def invoices(access_token:, tenant_id:, where: nil)
+        uri = config.invoices_uri.dup
+        uri.query = Rack::Utils.build_query(where: where) if where.present?
+
+        get_json(uri, access_token: access_token, tenant_id: tenant_id)
       end
 
       def invoice(access_token:, tenant_id:, invoice_id:)

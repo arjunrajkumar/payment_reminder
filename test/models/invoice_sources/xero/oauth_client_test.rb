@@ -28,6 +28,29 @@ module InvoiceSources
         end
       end
 
+      test "invoices passes the requested Xero filter" do
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices?where=Type%3D%3D%22ACCREC%22"
+        ).with(
+          headers: {
+            "Authorization" => "Bearer access-token",
+            "xero-tenant-id" => "tenant-123"
+          }
+        ).to_return(
+          status: 200,
+          body: { Invoices: [] }.to_json
+        )
+
+        payload = OauthClient.new.invoices(
+          access_token: "access-token",
+          tenant_id: "tenant-123",
+          where: 'Type=="ACCREC"'
+        )
+
+        assert_equal [], payload.fetch("Invoices")
+      end
+
       private
         def with_xero_credentials(**xero)
           credentials = ActiveSupport::OrderedOptions.new

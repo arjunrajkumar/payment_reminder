@@ -6,7 +6,9 @@ module CommunicationPreviewsHelper
     scheduled: 3,
     monitoring: 4,
     not_contacted: 4,
-    paid_up: 5
+    open: 5,
+    uncollectible: 6,
+    paid_up: 7
   }.freeze
 
   # Temporary named examples used by the UI prototype until communication and
@@ -23,7 +25,12 @@ module CommunicationPreviewsHelper
   }.freeze
 
   def communication_preview_for(customer)
-    return paid_up_communication_preview(customer) if customer.outstanding_invoices.none?
+    if customer.outstanding_invoices.none?
+      return open_communication_preview(customer) if customer.open_invoices.any?
+      return uncollectible_communication_preview(customer) if customer.uncollectible_invoices.any?
+
+      return paid_up_communication_preview(customer)
+    end
 
     communication_previews.fetch(customer.name.to_s.squish.downcase) do
       {
@@ -62,14 +69,16 @@ module CommunicationPreviewsHelper
 
   def communication_thread_for(customer)
     preview = communication_preview_for(customer)
+
+    return paid_up_thread(customer) if preview.fetch(:state) == :paid_up
+    return [] if preview.fetch(:state).in?([ :not_contacted, :open, :uncollectible ])
+
     invoice = customer.next_expected_invoice
     invoice_number = invoice&.number.presence || invoice&.external_id || "the open invoice"
 
-    return paid_up_thread(customer) if preview.fetch(:state) == :paid_up
     return nat_dogre_thread(invoice_number) if customer.name.casecmp?("Nat Dogre")
     return reliable_retainer_thread(invoice_number) if customer.name.casecmp?("Reliable Retainer")
     return brightside_thread(invoice_number) if customer.name.casecmp?("Brightside Studio")
-    return [] if preview.fetch(:state) == :not_contacted
 
     event_kind = communication_event_kind(preview.fetch(:state))
 
@@ -121,11 +130,45 @@ module CommunicationPreviewsHelper
       }
     end
 
+    def uncollectible_communication_preview(customer)
+      invoice_count = customer.uncollectible_invoices.size
+      verb = invoice_count == 1 ? "is" : "are"
+      description = "#{pluralize(invoice_count, "invoice")} #{verb} marked uncollectible. No collection follow-up is scheduled."
+
+      {
+        state: :uncollectible,
+        status: "Uncollectible",
+        tone: "slate",
+        activity: latest_activity(:no_activity, description: description),
+        summary: description,
+        timestamp: nil,
+        needs_attention: false,
+        contact_email: customer.email
+      }
+    end
+
+    def open_communication_preview(customer)
+      invoice_count = customer.open_invoices.size
+      verb = invoice_count == 1 ? "remains" : "remain"
+      description = "#{pluralize(invoice_count, "invoice")} #{verb} open with no balance due. No collection follow-up is scheduled."
+
+      {
+        state: :open,
+        status: "Open",
+        tone: "slate",
+        activity: latest_activity(:no_activity, description: description),
+        summary: description,
+        timestamp: nil,
+        needs_attention: false,
+        contact_email: customer.email
+      }
+    end
+
     def communication_event_kind(state)
       case state
       when :waiting then :outgoing
       when :scheduled then :scheduled
-      when :no_reply, :monitoring, :not_contacted, :paid_up then :system
+      when :no_reply, :monitoring, :not_contacted, :open, :uncollectible, :paid_up then :system
       else :incoming
       end
     end

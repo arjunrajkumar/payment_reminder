@@ -1,6 +1,8 @@
 module InvoiceSources
   class Xero
     class InvoiceSync
+      RECEIVABLE_INVOICE_FILTER = 'Type=="ACCREC"'.freeze
+
       def initialize(source, client: OauthClient.new)
         @source = source
         @client = client
@@ -9,7 +11,8 @@ module InvoiceSources
       def sync!
         payload = client.invoices(
           access_token: source.access_token,
-          tenant_id: source.external_account_id
+          tenant_id: source.external_account_id,
+          where: RECEIVABLE_INVOICE_FILTER
         )
 
         Array(payload.fetch("Invoices", [])).each do |invoice_payload|
@@ -40,33 +43,52 @@ module InvoiceSources
         attr_reader :source, :client
 
         def sync_invoice!(payload)
-          invoice = source.invoices.find_or_initialize_by(
-            account: source.account,
-            external_id: payload.fetch("InvoiceID")
-          )
+          return unless receivable_invoice?(payload)
 
-          contact = payload["Contact"] || {}
-          invoice.update!(
-            number: payload["InvoiceNumber"],
-            invoice_type: payload["Type"],
-            status: payload["Status"],
-            currency: payload["CurrencyCode"],
-            amount_due: payload["AmountDue"],
-            amount_paid: payload["AmountPaid"],
-            total: payload["Total"],
-            issued_on: parse_date(payload["DateString"] || payload["Date"]),
-            due_on: parse_date(payload["DueDateString"] || payload["DueDate"]),
-            paid_on: parse_date(payload["FullyPaidOnDate"]),
-            contact_external_id: contact["ContactID"],
-            contact_name: contact["Name"],
-            provider_data: {
-              updated_date_utc: payload["UpdatedDateUTC"],
-              reference: payload["Reference"],
-              amount_credited: payload["AmountCredited"]
-            },
-            raw_data: payload,
-            synced_at: Time.current
-          )
+          invoice_external_id = payload.fetch("InvoiceID")
+          contact = payload["Contact"].is_a?(Hash) ? payload["Contact"] : {}
+
+          Invoice.transaction do
+            customer = Customer.sync_from_provider!(
+              invoice_source: source,
+              external_id: contact["ContactID"].presence || "invoice:#{invoice_external_id}",
+              name: contact["Name"],
+              email: contact["EmailAddress"],
+              observed_at: parse_date(payload["DateString"] || payload["Date"])
+            )
+            invoice = source.invoices.find_or_initialize_by(
+              account: source.account,
+              external_id: invoice_external_id
+            )
+
+            invoice.update!(
+              customer: customer,
+              number: payload["InvoiceNumber"],
+              invoice_type: payload["Type"],
+              provider_status: payload["Status"],
+              status: InvoiceStatus.normalize(payload["Status"]),
+              currency: payload["CurrencyCode"],
+              amount_due: payload["AmountDue"],
+              amount_paid: payload["AmountPaid"],
+              total: payload["Total"],
+              issued_on: parse_date(payload["DateString"] || payload["Date"]),
+              due_on: parse_date(payload["DueDateString"] || payload["DueDate"]),
+              paid_on: parse_date(payload["FullyPaidOnDate"]),
+              contact_external_id: contact["ContactID"],
+              contact_name: contact["Name"],
+              provider_data: {
+                updated_date_utc: payload["UpdatedDateUTC"],
+                reference: payload["Reference"],
+                amount_credited: payload["AmountCredited"]
+              },
+              raw_data: payload,
+              synced_at: Time.current
+            )
+          end
+        end
+
+        def receivable_invoice?(payload)
+          payload["Type"].to_s.casecmp?("ACCREC")
         end
 
         def parse_date(value)

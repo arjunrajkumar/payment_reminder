@@ -18,6 +18,16 @@ class Customers::CollectionStatus
       tone: "unpaid",
       rule: "The balance remains open after collection has stalled"
     },
+    open: {
+      label: "Open",
+      tone: "open",
+      rule: "The provider still marks an invoice open, but no balance is due"
+    },
+    uncollectible: {
+      label: "Uncollectible",
+      tone: "uncollectible",
+      rule: "At least one invoice is marked uncollectible and no invoices remain open"
+    },
     paid: {
       label: "Paid",
       tone: "paid",
@@ -41,9 +51,19 @@ class Customers::CollectionStatus
     attr_reader :collection_state, :customer, :needs_attention
 
     def key
-      @key ||= if customer.outstanding_invoices.none?
+      @key ||= if customer.outstanding_invoices.any?
+        active_collection_key
+      elsif customer.open_invoices.any?
+        :open
+      elsif customer.uncollectible_invoices.any?
+        :uncollectible
+      else
         :paid
-      elsif collection_stalled_unpaid?
+      end
+    end
+
+    def active_collection_key
+      if collection_stalled_unpaid?
         :unpaid
       elsif attention_required?
         :needs_attention

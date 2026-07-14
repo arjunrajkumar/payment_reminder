@@ -60,13 +60,20 @@ class CoreFlowsTest < ApplicationSystemTestCase
         refresh_token: "refresh-token",
         expires_at: 30.minutes.from_now
       )
+      customer = source.customers.create!(
+        account: account,
+        external_id: "system-flow-contact",
+        name: "Harbor & Co"
+      )
 
       source.invoices.create!(
         account: account,
+        customer: customer,
         external_id: "system-flow-overdue",
         number: "INV-SYSTEM-OVERDUE",
         invoice_type: "ACCREC",
-        status: "AUTHORISED",
+        provider_status: "AUTHORISED",
+        status: "open",
         currency: "USD",
         amount_due: 50_000,
         amount_paid: 0,
@@ -80,10 +87,12 @@ class CoreFlowsTest < ApplicationSystemTestCase
 
       source.invoices.create!(
         account: account,
+        customer: customer,
         external_id: "system-flow-paid",
         number: "INV-SYSTEM-PAID",
         invoice_type: "ACCREC",
-        status: "PAID",
+        provider_status: "PAID",
+        status: "paid",
         currency: "USD",
         amount_due: 0,
         amount_paid: 5_000,

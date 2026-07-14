@@ -9,6 +9,10 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     assert_includes invoice_sources(:xero).invoices, invoices(:xero_invoice)
   end
 
+  test "has many customers" do
+    assert_includes invoice_sources(:xero).customers, customers(:xero_customer)
+  end
+
   test "requires provider and external account id" do
     source = accounts(:paid_jar).invoice_sources.build
 

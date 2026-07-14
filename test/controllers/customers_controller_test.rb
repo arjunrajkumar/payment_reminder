@@ -20,7 +20,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
       amount_due: 0,
       amount_paid: 1_200,
       total: 1_200,
-      status: "PAID",
+      status: "paid",
       issued_on: Date.new(2026, 1, 1),
       due_on: Date.new(2026, 1, 31),
       paid_on: Date.new(2026, 2, 5)
@@ -37,7 +37,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     create_invoice(source, external_id: "other", contact_external_id: "other", customer: "Other Customer", amount_due: 500)
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      get customer_url(customer_key_for(paid), script_name: account.slug)
+      get customer_url(paid.customer, script_name: account.slug)
     end
 
     assert_response :success
@@ -61,13 +61,13 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
   test "show plots every dated invoice on the invoice timing graph" do
     account = sign_up_and_complete(email_address: "owner-customer-anomaly@example.com")
     source = create_invoice_source(account)
-    unusual = create_invoice(source, external_id: "unusual", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "PAID", issued_on: Date.new(2026, 1, 1), due_on: Date.new(2026, 7, 31), paid_on: Date.new(2026, 1, 29))
-    create_invoice(source, external_id: "typical-1", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "PAID", issued_on: Date.new(2026, 2, 1), due_on: Date.new(2026, 2, 28), paid_on: Date.new(2026, 2, 28))
-    create_invoice(source, external_id: "typical-2", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "PAID", issued_on: Date.new(2026, 3, 1), due_on: Date.new(2026, 3, 31), paid_on: Date.new(2026, 3, 28))
+    unusual = create_invoice(source, external_id: "unusual", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "paid", issued_on: Date.new(2026, 1, 1), due_on: Date.new(2026, 7, 31), paid_on: Date.new(2026, 1, 29))
+    create_invoice(source, external_id: "typical-1", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "paid", issued_on: Date.new(2026, 2, 1), due_on: Date.new(2026, 2, 28), paid_on: Date.new(2026, 2, 28))
+    create_invoice(source, external_id: "typical-2", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 0, amount_paid: 100, total: 100, status: "paid", issued_on: Date.new(2026, 3, 1), due_on: Date.new(2026, 3, 31), paid_on: Date.new(2026, 3, 28))
     create_invoice(source, external_id: "current", contact_external_id: "reliable", customer: "Reliable Customer", amount_due: 250, due_on: Date.new(2026, 7, 25))
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      get customer_url(customer_key_for(unusual), script_name: account.slug)
+      get customer_url(unusual.customer, script_name: account.slug)
     end
 
     assert_response :success
@@ -100,7 +100,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     )
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      get customer_url(customer_key_for(customer_invoice), script_name: account.slug)
+      get customer_url(customer_invoice.customer, script_name: account.slug)
     end
 
     assert_response :success
@@ -123,17 +123,86 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
       amount_due: 0,
       amount_paid: 100,
       total: 100,
-      status: "PAID",
+      status: "paid",
       due_on: Date.new(2026, 6, 30)
     )
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      get customer_url(customer_key_for(paid), script_name: account.slug)
+      get customer_url(paid.customer, script_name: account.slug)
     end
 
     assert_response :success
     assert_select "[data-testid='payment-history-event']", text: /PAID-WITHOUT-DATE.*Paid.*Date unavailable/m
     assert_select "[data-testid='payment-history-event'] .app-payment-event__marker", count: 0
+  end
+
+  test "show does not present an open invoice with no balance as paid or overdue" do
+    account = sign_up_and_complete(email_address: "owner-customer-open-zero@example.com")
+    source = create_invoice_source(account, provider: :stripe)
+    invoice = create_invoice(
+      source,
+      external_id: "open-zero",
+      contact_external_id: "open-zero-customer",
+      customer: "Open Customer",
+      amount_due: 0,
+      total: 100,
+      status: "open",
+      due_on: Date.new(2026, 6, 30)
+    )
+
+    travel_to Time.zone.local(2026, 7, 11, 12) do
+      get customer_url(invoice.customer, script_name: account.slug)
+    end
+
+    assert_response :success
+    assert_select ".app-customer-header .app-collection-status", "Open"
+    assert_select ".app-customer-summary__copy", "1 invoice remains open with no balance due. No collection follow-up is scheduled."
+    assert_select ".app-customer-summary__receivable", text: /No balance due.*1 open invoice/m
+    assert_select "body", { text: "Paid in full", count: 0 }
+    assert_select "[data-testid='payment-history-event']", text: /OPEN-ZERO.*Open.*no balance due.*No balance due/m
+    assert_select "[data-testid='payment-history-event'] .app-payment-event__marker", count: 0
+  end
+
+  test "show presents an uncollectible invoice as terminal rather than paid or overdue" do
+    account = sign_up_and_complete(email_address: "owner-customer-uncollectible@example.com")
+    source = create_invoice_source(account, provider: :stripe)
+    paid = create_invoice(
+      source,
+      external_id: "closed-paid",
+      contact_external_id: "closed-customer",
+      customer: "Closed Customer",
+      amount_due: 0,
+      amount_paid: 100,
+      total: 100,
+      status: "paid",
+      due_on: Date.new(2026, 5, 31),
+      paid_on: Date.new(2026, 5, 30)
+    )
+    create_invoice(
+      source,
+      external_id: "closed-uncollectible",
+      contact_external_id: "closed-customer",
+      customer: "Closed Customer",
+      amount_due: 300,
+      status: "uncollectible",
+      due_on: Date.new(2026, 6, 1)
+    )
+
+    travel_to Time.zone.local(2026, 7, 11, 12) do
+      get customer_url(paid.customer, script_name: account.slug)
+    end
+
+    assert_response :success
+    assert_select ".app-customer-header .app-collection-status", "Uncollectible"
+    assert_select ".app-customer-summary__copy", "1 invoice is marked uncollectible. No collection follow-up is scheduled."
+    assert_select ".app-customer-summary__receivable", text: /INR 300 uncollectible/
+    assert_select ".app-customer-summary__receivable", text: /1 invoice/
+    assert_select "body", { text: "Paid in full", count: 0 }
+    assert_select "[data-testid='payment-history-event']", text: /CLOSED-UNCOLLECTIBLE.*Uncollectible/m
+    uncollectible_event = css_select("[data-testid='payment-history-event']").find { |event| event.text.include?("CLOSED-UNCOLLECTIBLE") }
+    assert_nil uncollectible_event.at_css(".app-payment-event__marker")
+    assert_select "#conversation .app-customer-card__conversation-state", "Uncollectible"
+    assert_select "#conversation .app-empty-inline", "1 invoice is marked uncollectible. No collection follow-up is scheduled."
   end
 
   test "show does not expose another account customer" do
@@ -145,27 +214,33 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     other_source = create_invoice_source(other_account)
     other_invoice = create_invoice(other_source, external_id: "private", contact_external_id: "private", customer: "Private Customer", amount_due: 500)
 
-    get customer_url(customer_key_for(other_invoice), script_name: account.slug)
+    get customer_url(other_invoice.customer, script_name: account.slug)
 
     assert_response :not_found
   end
 
   private
-    def create_invoice_source(account)
+    def create_invoice_source(account, provider: :xero)
       account.invoice_sources.create!(
-        provider: :xero,
+        provider: provider,
         status: :active,
-        external_account_id: "tenant-#{account.id}",
-        external_account_name: "PaymentReminder Xero",
+        external_account_id: "#{provider}-account-#{account.id}",
+        external_account_name: "PaymentReminder #{provider.to_s.titleize}",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 30.minutes.from_now
       )
     end
 
-    def create_invoice(source, external_id:, contact_external_id:, customer:, amount_due:, issued_on: Date.new(2026, 7, 1), due_on: Date.new(2026, 7, 31), paid_on: nil, status: "AUTHORISED", amount_paid: 0, total: nil, currency: "INR")
+    def create_invoice(source, external_id:, contact_external_id:, customer:, amount_due:, issued_on: Date.new(2026, 7, 1), due_on: Date.new(2026, 7, 31), paid_on: nil, status: "open", amount_paid: 0, total: nil, currency: "INR")
+      customer_record = source.customers.find_or_create_by!(
+        account: source.account,
+        external_id: contact_external_id
+      ) { |record| record.name = customer }
+
       source.invoices.create!(
         account: source.account,
+        customer: customer_record,
         external_id: external_id,
         number: external_id.upcase,
         invoice_type: "ACCREC",
@@ -180,10 +255,6 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
         due_on: due_on,
         paid_on: paid_on
       )
-    end
-
-    def customer_key_for(invoice)
-      Customers::Profile.encode_identity(Customers::Profile.identity_for(invoice))
     end
 
     def sign_up_and_complete(email_address: "owner-customers@example.com")

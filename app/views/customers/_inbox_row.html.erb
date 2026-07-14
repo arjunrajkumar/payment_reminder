@@ -2,6 +2,8 @@
 <% collection_status = collection_status_for(customer, preview: preview) %>
 <% payer_profile = payer_profile_for(customer) %>
 <% outstanding_invoice_count = customer.outstanding_invoices.size %>
+<% open_invoice_count = customer.open_invoices.size %>
+<% uncollectible_invoice_count = customer.uncollectible_invoices.size %>
 
 <tr
   data-testid="collection-priority"
@@ -16,7 +18,15 @@
 
   <td data-label="Receivable">
     <strong class="app-customer-card__amount">
-      <%= outstanding_invoice_count.positive? ? receivable_totals(customer.outstanding_totals) : "Paid in full" %>
+      <% if outstanding_invoice_count.positive? %>
+        <%= receivable_totals(customer.outstanding_totals) %>
+      <% elsif open_invoice_count.positive? %>
+        No balance due
+      <% elsif uncollectible_invoice_count.positive? %>
+        <%= receivable_totals(customer.uncollectible_totals, qualifier: "uncollectible") %>
+      <% else %>
+        Paid in full
+      <% end %>
     </strong>
     <div class="app-table-note app-customer-card__collection-context">
       <% if customer.oldest_overdue_days %>
@@ -29,6 +39,9 @@
     </div>
     <% if outstanding_invoice_count > 1 %>
       <div class="app-table-note">for <%= pluralize(outstanding_invoice_count, "invoice") %></div>
+    <% end %>
+    <% if uncollectible_invoice_count.positive? %>
+      <div class="app-table-note"><%= pluralize(uncollectible_invoice_count, "invoice") %> marked uncollectible</div>
     <% end %>
   </td>
 

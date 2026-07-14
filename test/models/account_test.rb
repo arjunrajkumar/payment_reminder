@@ -13,6 +13,10 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes accounts(:paid_jar).invoices, invoices(:xero_invoice)
   end
 
+  test "has many customers" do
+    assert_includes accounts(:paid_jar).customers, customers(:xero_customer)
+  end
+
   test "creates account with owner and system user" do
     identity = Identity.create!(email_address: "owner@example.com")
     account = Account.create_with_owner(

@@ -6,6 +6,8 @@
 <% collection_status = collection_status_for(@customer, preview: communication) %>
 <% timing_events = @customer.invoice_timing_events %>
 <% outstanding_invoice_count = @customer.outstanding_invoices.size %>
+<% open_invoice_count = @customer.open_invoices.size %>
+<% uncollectible_invoice_count = @customer.uncollectible_invoices.size %>
 
 <%= render "receivables/nav", active: :home %>
 
@@ -41,6 +43,24 @@
           <%= customer_invoice_due_context(@customer.next_expected_invoice, as_of: @customer.as_of) %>
         <% end %>
       </span>
+      <% if uncollectible_invoice_count.positive? %>
+        <span aria-hidden="true">·</span>
+        <span><%= pluralize(uncollectible_invoice_count, "uncollectible invoice") %></span>
+      <% end %>
+    <% elsif open_invoice_count.positive? %>
+      <strong>No balance due</strong>
+      <span aria-hidden="true">·</span>
+      <span><%= pluralize(open_invoice_count, "open invoice") %></span>
+      <% if uncollectible_invoice_count.positive? %>
+        <span aria-hidden="true">·</span>
+        <span><%= pluralize(uncollectible_invoice_count, "uncollectible invoice") %></span>
+      <% end %>
+    <% elsif uncollectible_invoice_count.positive? %>
+      <strong><%= receivable_totals(@customer.uncollectible_totals, qualifier: "uncollectible") %></strong>
+      <span aria-hidden="true">·</span>
+      <span><%= pluralize(uncollectible_invoice_count, "invoice") %></span>
+      <span aria-hidden="true">·</span>
+      <span>No collection due</span>
     <% else %>
       <strong>Paid in full</strong>
       <span aria-hidden="true">·</span>
@@ -67,7 +87,11 @@
         <div class="app-payment-event" data-testid="payment-history-event">
           <div class="app-payment-event__invoice">
             <strong><%= invoice.number.presence || invoice.external_id %></strong>
-            <% if event.fetch(:paid) && invoice.paid_on.blank? %>
+            <% if event.fetch(:uncollectible) %>
+              <span>Uncollectible</span>
+            <% elsif event.fetch(:no_balance_due) %>
+              <span>Open · no balance due</span>
+            <% elsif event.fetch(:paid) && invoice.paid_on.blank? %>
               <span>Paid</span>
             <% else %>
               <span><%= event.fetch(:paid) ? "Paid" : "Due" %> <%= customer_invoice_date(event.fetch(:paid) ? invoice.paid_on : invoice.due_on) %></span>

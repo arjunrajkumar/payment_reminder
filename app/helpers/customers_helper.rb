@@ -14,6 +14,9 @@ module CustomersHelper
   end
 
   def customer_invoice_timing_label(event)
+    return "Uncollectible" if event.fetch(:uncollectible)
+    return "No balance due" if event.fetch(:no_balance_due)
+
     days = event.fetch(:delay)
 
     if event.fetch(:paid)
@@ -30,6 +33,7 @@ module CustomersHelper
   end
 
   def customer_invoice_timing_tone(event)
+    return "slate" if event.fetch(:uncollectible) || event.fetch(:no_balance_due)
     return "slate" unless event.fetch(:delay)
     return event.fetch(:delay).positive? ? "red-open" : "slate" unless event.fetch(:paid)
     return "green" if event.fetch(:delay) <= 0

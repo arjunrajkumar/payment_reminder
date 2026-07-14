@@ -33,17 +33,81 @@ module InvoiceSources
 
       InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
+      assert_difference -> { source.customers.count }, 1 do
+        assert_difference -> { source.invoices.count }, 1 do
+          InvoiceSources::Xero.new(source).sync_invoices!
+        end
+      end
+
+      invoice = source.invoices.find_by!(external_id: "invoice-456")
+      customer = source.customers.find_by!(external_id: "contact-456")
+      assert_equal "INV-456", invoice.number
+      assert_equal "Example Customer", invoice.contact_name
+      assert_equal "AUTHORISED", invoice.provider_status
+      assert_equal "open", invoice.status
+      assert_equal BigDecimal("250.50"), invoice.total
+      assert_equal Date.new(2026, 7, 11), invoice.paid_on
+      assert_equal customer, invoice.customer
+      assert_equal "Example Customer", customer.name
+      assert_equal "billing@example.com", customer.email
+      assert_equal Date.new(2026, 7, 1), customer.details_observed_at.to_date
+      assert fake_client.invoices_called
+    end
+
+    test "sync_invoices reuses the Xero customer for the same contact" do
+      source = invoice_sources(:xero)
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      InvoiceSources::Xero.new(source).sync_invoices!
+
+      assert_no_difference [ -> { source.customers.count }, -> { source.invoices.count } ] do
+        InvoiceSources::Xero.new(source).sync_invoices!
+      end
+    end
+
+    test "sync_invoices uses an invoice identity when Xero omits the contact id" do
+      source = invoice_sources(:xero)
+      fake_client = FakeXeroClient.new(contact_id: nil)
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      InvoiceSources::Xero.new(source).sync_invoices!
+
+      invoice = source.invoices.find_by!(external_id: "invoice-456")
+      assert_equal "invoice:invoice-456", invoice.customer.external_id
+      assert_equal "Example Customer", invoice.customer.name
+      assert_equal "billing@example.com", invoice.customer.email
+      assert_nil invoice.contact_external_id
+    end
+
+    test "sync_invoices requests and stores only accounts receivable invoices" do
+      source = invoice_sources(:xero)
+      fake_client = FakeXeroClient.new(include_payable_invoice: true)
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
       assert_difference -> { source.invoices.count }, 1 do
         InvoiceSources::Xero.new(source).sync_invoices!
       end
 
-      invoice = source.invoices.find_by!(external_id: "invoice-456")
-      assert_equal "INV-456", invoice.number
-      assert_equal "Example Customer", invoice.contact_name
-      assert_equal "AUTHORISED", invoice.status
-      assert_equal BigDecimal("250.50"), invoice.total
-      assert_equal Date.new(2026, 7, 11), invoice.paid_on
-      assert fake_client.invoices_called
+      assert_equal 'Type=="ACCREC"', fake_client.invoices_filter
+      assert source.invoices.exists?(external_id: "invoice-456")
+      assert_not source.invoices.exists?(external_id: "bill-456")
+    end
+
+    test "sync_invoice ignores an accounts payable bill" do
+      source = invoice_sources(:xero)
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      assert_no_difference -> { source.invoices.count } do
+        InvoiceSources::Xero.new(source).sync_invoice!(external_id: "bill-456")
+      end
+
+      assert_not source.invoices.exists?(external_id: "bill-456")
     end
 
     test "refreshes an expired access token before syncing invoices" do
@@ -64,11 +128,13 @@ module InvoiceSources
 
     class FakeXeroClient
       attr_accessor :exchange_code_called, :connections_called, :userinfo_called,
-        :invoices_called, :refresh_token_called
+        :invoices_called, :invoices_filter, :refresh_token_called
 
-      def initialize(tenant_id: "tenant-123", tenant_name: "PaymentReminder Demo")
+      def initialize(tenant_id: "tenant-123", tenant_name: "PaymentReminder Demo", include_payable_invoice: false, contact_id: "contact-456")
         @tenant_id = tenant_id
         @tenant_name = tenant_name
+        @include_payable_invoice = include_payable_invoice
+        @contact_id = contact_id
       end
 
       def exchange_code(code:)
@@ -120,11 +186,12 @@ module InvoiceSources
         }
       end
 
-      def invoices(access_token:, tenant_id:)
+      def invoices(access_token:, tenant_id:, where:)
         raise "unexpected access token" unless access_token.in?(%w[access-token new-access-token])
         raise "unexpected tenant id" unless tenant_id == "xero-tenant-123"
 
         self.invoices_called = true
+        self.invoices_filter = where
         {
           "Invoices" => [
             {
@@ -140,9 +207,44 @@ module InvoiceSources
               "DueDateString" => "2026-07-31",
               "FullyPaidOnDate" => "/Date(1783728000000+0000)/",
               "Contact" => {
-                "ContactID" => "contact-456",
-                "Name" => "Example Customer"
+                "ContactID" => @contact_id,
+                "Name" => "Example Customer",
+                "EmailAddress" => "billing@example.com"
               }
+            }
+          ].tap do |invoices|
+            if @include_payable_invoice
+              invoices << {
+                "InvoiceID" => "bill-456",
+                "InvoiceNumber" => "BILL-456",
+                "Type" => "ACCPAY",
+                "Status" => "AUTHORISED",
+                "CurrencyCode" => "USD",
+                "AmountDue" => "100.00",
+                "AmountPaid" => "0.00",
+                "Total" => "100.00"
+              }
+            end
+          end
+        }
+      end
+
+      def invoice(access_token:, tenant_id:, invoice_id:)
+        raise "unexpected access token" unless access_token == "access-token"
+        raise "unexpected tenant id" unless tenant_id == "xero-tenant-123"
+        raise "unexpected invoice id" unless invoice_id == "bill-456"
+
+        {
+          "Invoices" => [
+            {
+              "InvoiceID" => "bill-456",
+              "InvoiceNumber" => "BILL-456",
+              "Type" => "ACCPAY",
+              "Status" => "AUTHORISED",
+              "CurrencyCode" => "USD",
+              "AmountDue" => "100.00",
+              "AmountPaid" => "0.00",
+              "Total" => "100.00"
             }
           ]
         }

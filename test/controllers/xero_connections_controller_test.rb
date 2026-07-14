@@ -192,9 +192,10 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
         }
       end
 
-      def invoices(access_token:, tenant_id:)
+      def invoices(access_token:, tenant_id:, where:)
         raise "unexpected access token" unless access_token == "access-token"
         raise "unexpected tenant id" unless tenant_id == "tenant-123"
+        raise "unexpected invoice filter" unless where == 'Type=="ACCREC"'
 
         {
           "Invoices" => [

@@ -23,6 +23,7 @@ class InvoiceSource < ApplicationRecord
   ].freeze
 
   belongs_to :account, inverse_of: :invoice_sources
+  has_many :customers, dependent: :destroy
   has_many :invoices, dependent: :destroy
   has_many :webhook_events, class_name: "InvoiceSources::Webhooks::Event", dependent: :destroy
 

@@ -1,10 +1,12 @@
 xero_invoice:
   account: paid_jar
   invoice_source: xero
+  customer: xero_customer
   external_id: invoice-123
   number: INV-001
   invoice_type: ACCREC
-  status: AUTHORISED
+  provider_status: AUTHORISED
+  status: open
   currency: USD
   amount_due: 125.00
   amount_paid: 0.00

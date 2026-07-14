@@ -1,5 +1,6 @@
 class Account < ApplicationRecord
   has_many :invoice_sources, dependent: :destroy
+  has_many :customers, dependent: :destroy
   has_many :invoices, dependent: :destroy
   has_many :users, dependent: :destroy
 

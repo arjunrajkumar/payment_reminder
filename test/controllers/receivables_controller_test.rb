@@ -20,8 +20,8 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
       create_invoice(source, external_id: "overdue-3", number: "INV-0004", customer: "Northstar Consulting", amount_due: 8_400, due_on: Date.new(2026, 6, 1))
       create_invoice(source, external_id: "overdue-4", number: "INV-0005", customer: "Greenline Foods", amount_due: 2_900, due_on: Date.new(2026, 5, 1))
       harbor = create_invoice(source, external_id: "overdue-5", number: "INV-0006", customer: "Harbor & Co", amount_due: 950, due_on: Date.new(2026, 3, 31))
-      create_invoice(source, external_id: "paid", number: "INV-0008", customer: "Cedar Works", status: "PAID", amount_due: 0, amount_paid: 3_200, total: 3_200, due_on: Date.new(2026, 4, 30), paid_on: Date.new(2026, 7, 10))
-      create_invoice(source, external_id: "draft", number: "INV-0009", customer: "Draft Test Customer", status: "DRAFT", amount_due: 1_100, due_on: Date.new(2026, 7, 31))
+      create_invoice(source, external_id: "paid", number: "INV-0008", customer: "Cedar Works", status: "paid", amount_due: 0, amount_paid: 3_200, total: 3_200, due_on: Date.new(2026, 4, 30), paid_on: Date.new(2026, 7, 10))
+      create_invoice(source, external_id: "draft", number: "INV-0009", customer: "Draft Test Customer", status: "pending", amount_due: 1_100, due_on: Date.new(2026, 7, 31))
 
       get home_url
     end
@@ -74,12 +74,10 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_select "#collection-priorities tbody .app-pill", count: 0
     assert_select "#collection-priorities tbody .app-collection-status", count: 7
 
-    assert_select "a[href=?]", customer_path(customer_key_for(harbor)), "Harbor & Co"
+    assert_select "a[href=?]", customer_path(harbor.customer), "Harbor & Co"
     assert_select "body", { text: "Draft Test Customer", count: 0 }
     assert_select "form[action=?]", invoice_source_refresh_path(source), count: 0
-    assert_select "#aging-breakdown-title", "Breakdown of outstanding receivables"
-    assert_select ".app-aging-chart", count: 1
-    assert_select "[data-testid^='aging-']", count: 5
+    assert_select ".app-aging-card", count: 0
   end
 
   test "index shows an empty state when no invoice source is connected" do
@@ -107,13 +105,69 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
   test "index explains when only draft invoices have synced" do
     account = sign_up_and_complete(email_address: "owner-receivables-drafts@example.com")
     source = create_invoice_source(account, provider: :xero)
-    create_invoice(source, external_id: "draft-only", number: "DRAFT-1", customer: "Draft Customer", status: "DRAFT", amount_due: 1_100)
+    create_invoice(source, external_id: "draft-only", number: "DRAFT-1", customer: "Draft Customer", status: "pending", amount_due: 1_100)
 
     get home_url
 
     assert_response :success
     assert_select "[data-testid='no-issued-invoices']"
     assert_select "body", { text: "Draft Customer", count: 0 }
+  end
+
+  test "index distinguishes uncollectible invoices from open and paid invoices" do
+    account = sign_up_and_complete(email_address: "owner-receivables-uncollectible@example.com")
+    source = create_invoice_source(account, provider: :stripe)
+
+    create_invoice(source, external_id: "closed-paid", number: "CLOSED-PAID", customer: "Closed Customer", status: "paid", amount_due: 0, amount_paid: 100, total: 100)
+    create_invoice(source, external_id: "closed-uncollectible", number: "CLOSED-BAD", customer: "Closed Customer", status: "uncollectible", amount_due: 400)
+    create_invoice(source, external_id: "mixed-open", number: "MIXED-OPEN", customer: "Mixed Customer", amount_due: 100)
+    create_invoice(source, external_id: "mixed-uncollectible", number: "MIXED-BAD", customer: "Mixed Customer", status: "uncollectible", amount_due: 75)
+
+    travel_to Time.zone.local(2026, 7, 11, 12) do
+      get home_url
+    end
+
+    assert_response :success
+    rows = css_select("#collection-priorities tbody tr")
+    closed_row = rows.find { |row| row.text.include?("Closed Customer") }
+    mixed_row = rows.find { |row| row.text.include?("Mixed Customer") }
+
+    assert_equal "uncollectible", closed_row["data-conversation-state"]
+    assert_includes closed_row.text, "INR 400 uncollectible"
+    assert_includes closed_row.text, "1 invoice marked uncollectible"
+    assert_includes closed_row.text, "No collection follow-up is scheduled"
+    assert_includes closed_row.text, "Uncollectible"
+    assert_not_includes closed_row.text, "Paid in full"
+
+    assert_equal "not_contacted", mixed_row["data-conversation-state"]
+    assert_includes mixed_row.text, "INR 100"
+    assert_includes mixed_row.text, "1 invoice marked uncollectible"
+    assert_includes mixed_row.text, "In progress"
+    assert_not_includes mixed_row.text, "Paid in full"
+  end
+
+  test "index does not call an open invoice paid when no balance is due" do
+    account = sign_up_and_complete(email_address: "owner-receivables-open-zero@example.com")
+    source = create_invoice_source(account, provider: :stripe)
+    create_invoice(
+      source,
+      external_id: "open-zero",
+      number: "OPEN-ZERO",
+      customer: "Open Customer",
+      status: "open",
+      amount_due: 0,
+      total: 100
+    )
+
+    get home_url
+
+    assert_response :success
+    row = css_select("#collection-priorities tbody tr").sole
+    assert_equal "open", row["data-conversation-state"]
+    assert_includes row.text, "No balance due"
+    assert_includes row.text, "Open"
+    assert_includes row.text, "No collection follow-up is scheduled"
+    assert_not_includes row.text, "Paid in full"
   end
 
   private
@@ -129,9 +183,15 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
       )
     end
 
-    def create_invoice(source, external_id:, number:, customer:, amount_due:, due_on: 2.weeks.from_now.to_date, status: "AUTHORISED", amount_paid: 0, total: nil, invoice_type: "ACCREC", paid_on: nil)
+    def create_invoice(source, external_id:, number:, customer:, amount_due:, due_on: 2.weeks.from_now.to_date, status: "open", amount_paid: 0, total: nil, invoice_type: "ACCREC", paid_on: nil)
+      customer_record = source.customers.find_or_create_by!(
+        account: source.account,
+        external_id: customer.parameterize
+      ) { |record| record.name = customer }
+
       source.invoices.create!(
         account: source.account,
+        customer: customer_record,
         external_id: external_id,
         number: number,
         invoice_type: invoice_type,
@@ -145,10 +205,6 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
         due_on: due_on,
         paid_on: paid_on
       )
-    end
-
-    def customer_key_for(invoice)
-      Customers::Profile.encode_identity(Customers::Profile.identity_for(invoice))
     end
 
     def sign_up_and_complete(email_address: "owner-receivables@example.com")

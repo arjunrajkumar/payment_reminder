@@ -1,14 +1,10 @@
-<% preview = communication_preview_for(customer) %>
-<% collection_status = collection_status_for(customer, preview: preview) %>
-<% payer_profile = payer_profile_for(customer) %>
+<% invoice_status = customer_invoice_status(customer) %>
+<% payer_profile = customer_payer_profile(customer) %>
 <% outstanding_invoice_count = customer.outstanding_invoices.size %>
 <% open_invoice_count = customer.open_invoices.size %>
 <% uncollectible_invoice_count = customer.uncollectible_invoices.size %>
 
-<tr
-  data-testid="collection-priority"
-  data-conversation-state="<%= preview.fetch(:state) %>"
->
+<tr data-testid="customer-inbox-row">
   <td class="app-customer-card__identity" data-label="Customer">
     <div class="app-customer-card__identity-copy">
       <%= link_to customer.name, customer_path(customer), class: "app-data-link" %>
@@ -20,15 +16,15 @@
     <strong class="app-customer-card__amount">
       <% if outstanding_invoice_count.positive? %>
         <%= receivable_totals(customer.outstanding_totals) %>
-      <% elsif open_invoice_count.positive? %>
-        No balance due
       <% elsif uncollectible_invoice_count.positive? %>
         <%= receivable_totals(customer.uncollectible_totals, qualifier: "uncollectible") %>
+      <% elsif open_invoice_count.positive? %>
+        No balance due
       <% else %>
         Paid in full
       <% end %>
     </strong>
-    <div class="app-table-note app-customer-card__collection-context">
+    <div class="app-table-note app-customer-card__receivable-context">
       <% if customer.oldest_overdue_days %>
         <%= pluralize(customer.oldest_overdue_days, "day") %> overdue
       <% elsif outstanding_invoice_count.positive? %>
@@ -43,13 +39,12 @@
     <% if uncollectible_invoice_count.positive? %>
       <div class="app-table-note"><%= pluralize(uncollectible_invoice_count, "invoice") %> marked uncollectible</div>
     <% end %>
-  </td>
-
-  <td class="app-customer-card__summary" data-label="Payment summary">
-    <p><%= preview.fetch(:summary) %></p>
+    <% if outstanding_invoice_count.zero? && uncollectible_invoice_count.positive? && open_invoice_count.positive? %>
+      <div class="app-table-note"><%= pluralize(open_invoice_count, "open invoice") %> with no balance due</div>
+    <% end %>
   </td>
 
   <td class="app-customer-card__status" data-label="Status">
-    <span class="app-collection-status app-collection-status--<%= collection_status.fetch(:tone) %>"><%= collection_status.fetch(:label) %></span>
+    <span class="app-invoice-status app-invoice-status--<%= invoice_status.fetch(:tone) %>"><%= invoice_status.fetch(:label) %></span>
   </td>
 </tr>

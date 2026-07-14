@@ -1,4 +1,20 @@
 module CustomersHelper
+  CUSTOMER_INVOICE_STATUSES = {
+    overdue: { label: "Overdue", tone: "overdue" },
+    outstanding: { label: "Outstanding", tone: "outstanding" },
+    uncollectible: { label: "Uncollectible", tone: "uncollectible" },
+    open: { label: "Open", tone: "open" },
+    paid: { label: "Paid", tone: "paid" }
+  }.freeze
+
+  def customer_invoice_status(customer)
+    CUSTOMER_INVOICE_STATUSES.fetch(customer_invoice_status_key(customer))
+  end
+
+  def customer_payer_profile(customer)
+    Customers::PayerProfile.new(customer).to_h
+  end
+
   def customer_invoice_date(date)
     date ? I18n.l(date, format: "%b %-d, %Y") : "—"
   end
@@ -41,4 +57,14 @@ module CustomersHelper
 
     "red"
   end
+
+  private
+    def customer_invoice_status_key(customer)
+      return :overdue if customer.overdue_invoices.any?
+      return :outstanding if customer.outstanding_invoices.any?
+      return :uncollectible if customer.uncollectible_invoices.any?
+      return :open if customer.open_invoices.any?
+
+      :paid
+    end
 end

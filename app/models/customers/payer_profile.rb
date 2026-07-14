@@ -5,8 +5,8 @@ class Customers::PayerProfile
   UNRELIABLE_ON_TIME_RATE = 50
   SLOW_PAYER_DAYS = 7
 
-  # A payer profile describes durable payment behavior. Invoice timing,
-  # disputes, replies, and reminder progress are separate collection states.
+  # A payer profile describes durable payment behavior from persisted invoice
+  # due dates and payment dates.
   CATEGORIES = {
     new: {
       name: "New",
@@ -30,9 +30,8 @@ class Customers::PayerProfile
     }
   }.freeze
 
-  def initialize(customer, override: nil)
+  def initialize(customer)
     @customer = customer
-    @override = override
   end
 
   def to_h
@@ -40,10 +39,10 @@ class Customers::PayerProfile
   end
 
   private
-    attr_reader :customer, :override
+    attr_reader :customer
 
     def key
-      @key ||= override&.fetch(:key, nil) || inferred_key
+      @key ||= inferred_key
     end
 
     def category

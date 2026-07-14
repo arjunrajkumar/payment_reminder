@@ -1131,22 +1131,17 @@ body.app-workspace {
 
 .app-workspace .app-customer-table th:nth-child(1),
 .app-workspace .app-customer-table td:nth-child(1) {
-  width: 18%;
+  width: 38%;
 }
 
 .app-workspace .app-customer-table th:nth-child(2),
 .app-workspace .app-customer-table td:nth-child(2) {
-  width: 15%;
+  width: 40%;
 }
 
 .app-workspace .app-customer-table th:nth-child(3),
 .app-workspace .app-customer-table td:nth-child(3) {
-  width: 47%;
-}
-
-.app-workspace .app-customer-table th:nth-child(4),
-.app-workspace .app-customer-table td:nth-child(4) {
-  width: 20%;
+  width: 22%;
 }
 
 .app-workspace .app-customer-card__identity .app-data-link {
@@ -1171,14 +1166,13 @@ body.app-workspace {
   margin-bottom: 0;
 }
 
-.app-workspace .app-customer-header > .app-collection-status {
+.app-workspace .app-customer-header > .app-invoice-status {
   align-self: flex-start;
   margin-left: auto;
 }
 
 .app-workspace .app-customer-summary .app-card__title,
-.app-workspace .app-payment-history .app-card__title,
-.app-workspace .app-conversation .app-card__title {
+.app-workspace .app-payment-history .app-card__title {
   font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 650;
@@ -1188,15 +1182,6 @@ body.app-workspace {
 .app-workspace .app-customer-summary {
   margin-top: 1rem;
   padding: 1.25rem;
-}
-
-.app-workspace .app-customer-summary__copy {
-  max-width: 52rem;
-  margin: 0.75rem 0 0;
-  color: var(--color-text-soft);
-  font-size: 0.8125rem;
-  font-weight: 400;
-  line-height: 1.3rem;
 }
 
 .app-workspace .app-customer-summary__receivable {
@@ -1226,8 +1211,7 @@ body.app-workspace {
 .app-workspace .app-customer-breadcrumb,
 .app-workspace .app-customer-header,
 .app-workspace .app-customer-summary,
-.app-workspace .app-payment-history,
-.app-workspace .app-conversation {
+.app-workspace .app-payment-history {
   max-width: 72rem;
 }
 
@@ -1242,8 +1226,7 @@ body.app-workspace {
 }
 
 .app-workspace .app-payment-history .app-payment-event__invoice strong,
-.app-workspace .app-payment-history .app-payment-event__timing strong,
-.app-workspace .app-conversation .app-customer-card__conversation-state {
+.app-workspace .app-payment-history .app-payment-event__timing strong {
   font-size: 0.8125rem;
   line-height: 1.25rem;
 }
@@ -1264,11 +1247,11 @@ body.app-workspace {
   line-height: 1rem;
 }
 
-.app-workspace .app-customer-card__collection-context {
+.app-workspace .app-customer-card__receivable-context {
   margin-top: 0.35rem;
 }
 
-.app-workspace .app-collection-status {
+.app-workspace .app-invoice-status {
   display: inline-flex;
   min-height: 2.25rem;
   align-items: center;
@@ -1282,77 +1265,29 @@ body.app-workspace {
   white-space: nowrap;
 }
 
-.app-workspace .app-collection-status--in-progress {
-  border-color: #c7d5ff;
-  background: #eef3ff;
-  color: #2447c6;
-}
-
-.app-workspace .app-collection-status--needs-attention {
-  border-color: #efc48d;
-  background: #fff3e6;
-  color: #914c0c;
-}
-
-.app-workspace .app-collection-status--unpaid {
+.app-workspace .app-invoice-status--overdue {
   border-color: #f0b9bd;
   background: #fff0f1;
   color: #9b3039;
 }
 
-.app-workspace .app-collection-status--paid {
+.app-workspace .app-invoice-status--outstanding {
+  border-color: #c7d5ff;
+  background: #eef3ff;
+  color: #2447c6;
+}
+
+.app-workspace .app-invoice-status--paid {
   border-color: #b7e2c3;
   background: #ecf9ef;
   color: #23693b;
 }
 
-.app-workspace .app-collection-status--open,
-.app-workspace .app-collection-status--uncollectible {
+.app-workspace .app-invoice-status--open,
+.app-workspace .app-invoice-status--uncollectible {
   border-color: #d0d5dd;
   background: #f2f4f7;
   color: #475467;
-}
-
-.app-workspace .app-customer-card__conversation-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  color: #344054;
-  font-size: 0.875rem;
-  font-weight: 650;
-  line-height: 1.25rem;
-}
-
-.app-workspace .app-customer-card__conversation-state::before {
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 999px;
-  background: #98a2b3;
-  content: "";
-  flex: 0 0 auto;
-}
-
-.app-workspace .app-customer-card__conversation-state--blue::before {
-  background: #4f6ee8;
-}
-
-.app-workspace .app-customer-card__conversation-state--red::before {
-  background: #e05d67;
-}
-
-.app-workspace .app-customer-card__conversation-state--amber::before {
-  background: #d69b25;
-}
-
-.app-workspace .app-customer-card__conversation-state--green::before {
-  background: #55a56f;
-}
-
-.app-workspace .app-customer-card__summary p {
-  margin: 0;
-  color: #344054;
-  font-size: 0.875rem;
-  line-height: 1.35rem;
 }
 
 .app-workspace .app-customer-inbox .app-table-note {
@@ -1365,140 +1300,10 @@ body.app-workspace {
   vertical-align: middle;
 }
 
-/* Customer conversation: chronological events rather than chat bubbles. */
-.app-workspace .app-conversation {
-  margin-top: 1rem;
-  scroll-margin-top: 1.25rem;
-  padding: 1.25rem;
-}
-
-.app-workspace .app-conversation__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-}
-
-.app-workspace .app-conversation-thread {
-  position: relative;
-  margin: 1rem 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.app-workspace .app-conversation-thread::before {
-  position: absolute;
-  top: 0.85rem;
-  bottom: 0.85rem;
-  left: 0.3rem;
-  width: 1px;
-  background: #dfe3ea;
-  content: "";
-}
-
-.app-workspace .app-conversation-event {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.3rem;
-  margin: 0;
-  border-top: 1px solid var(--color-row-border);
-  padding: 0.875rem 0 0.875rem 1.5rem;
-}
-
-.app-workspace .app-conversation-event:first-child {
-  border-top: 0;
-}
-
-.app-workspace .app-conversation-event::before {
-  position: absolute;
-  top: 1.05rem;
-  left: 0;
-  width: 0.625rem;
-  height: 0.625rem;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  background: #98a2b3;
-  box-shadow: 0 0 0 1px #cfd5df;
-  content: "";
-}
-
-.app-workspace .app-conversation-event--incoming::before {
-  background: var(--color-accent);
-  box-shadow: 0 0 0 1px #9fb5ff;
-}
-
-.app-workspace .app-conversation-event--outgoing::before {
-  background: #4c9b68;
-  box-shadow: 0 0 0 1px #a9d5b7;
-}
-
-.app-workspace .app-conversation-event--scheduled::before {
-  background: #7a5af8;
-  box-shadow: 0 0 0 1px #c6bafb;
-}
-
-.app-workspace .app-conversation-event__meta {
-  min-width: 0;
-}
-
-.app-workspace .app-conversation-event__meta span,
-.app-workspace .app-conversation-event__meta strong {
-  display: block;
-}
-
-.app-workspace .app-conversation-event__kind {
-  color: #667085;
-  font-size: 0.625rem;
-  font-weight: 750;
-  letter-spacing: 0.055em;
-  line-height: 0.9rem;
-  text-transform: uppercase;
-}
-
-.app-workspace .app-conversation-event--incoming .app-conversation-event__kind {
-  color: var(--color-accent-dark);
-}
-
-.app-workspace .app-conversation-event--outgoing .app-conversation-event__kind {
-  color: #317046;
-}
-
-.app-workspace .app-conversation-event--scheduled .app-conversation-event__kind {
-  color: #6941c6;
-}
-
-.app-workspace .app-conversation-event__meta strong {
-  margin-top: 0.125rem;
-  color: var(--color-text-soft);
-  font-size: 0.8125rem;
-  line-height: 1.15rem;
-}
-
-.app-workspace .app-conversation-event__meta span:last-child {
-  margin-top: 0.075rem;
-  color: var(--color-text-muted);
-  font-size: 0.6875rem;
-  line-height: 1rem;
-}
-
-.app-workspace .app-conversation-event > p {
-  margin: 0;
-  color: #344054;
-  font-size: 0.8125rem;
-  line-height: 1.35rem;
-}
-
-.app-workspace .app-conversation-event--incoming > p {
-  color: var(--color-text-soft);
-  font-weight: 540;
-}
-
 /* Keep the inbox as one scrollable table on narrow screens. */
 @media (max-width: 69.99rem) {
   .app-workspace .app-customer-inbox .app-customer-table {
-    min-width: 48rem;
+    min-width: 40rem;
   }
 
   .app-workspace .app-customer-inbox .app-customer-table th,
@@ -1509,12 +1314,7 @@ body.app-workspace {
     vertical-align: top;
   }
 
-  .app-workspace .app-customer-inbox .app-customer-card__summary p {
-    font-size: 0.75rem;
-    line-height: 1.125rem;
-  }
-
-  .app-workspace .app-customer-inbox .app-collection-status {
+  .app-workspace .app-customer-inbox .app-invoice-status {
     min-height: 2rem;
     font-size: 0.75rem;
     line-height: 1rem;
@@ -1524,17 +1324,10 @@ body.app-workspace {
 }
 
 @media (min-width: 70rem) {
-  .app-workspace .app-customer-inbox .app-customer-table th:nth-child(4),
-  .app-workspace .app-customer-inbox .app-customer-table td:nth-child(4) {
+  .app-workspace .app-customer-inbox .app-customer-table th:nth-child(3),
+  .app-workspace .app-customer-inbox .app-customer-table td:nth-child(3) {
     padding-right: 0.75rem;
     padding-left: 0.75rem;
-  }
-}
-
-@media (min-width: 40rem) {
-  .app-workspace .app-conversation-event {
-    grid-template-columns: minmax(9rem, 0.28fr) minmax(0, 1fr);
-    gap: 1rem;
   }
 }
 

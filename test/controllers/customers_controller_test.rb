@@ -9,7 +9,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to home_url(script_name: account.slug)
   end
 
-  test "show presents the payment summary invoice timing and conversation" do
+  test "show presents the payment summary and invoice timing from persisted invoices" do
     account = sign_up_and_complete(email_address: "owner-customer-show@example.com")
     source = create_invoice_source(account)
     paid = create_invoice(
@@ -42,18 +42,18 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "Harbor & Co"
-    assert_select ".app-page-subtitle", "Customer segment: Unreliable payer"
-    assert_select ".app-customer-header .app-collection-status", "Unpaid"
+    assert_select ".app-page-subtitle", "Customer segment: New"
+    assert_select ".app-customer-header .app-invoice-status", "Overdue"
     assert_select "#payment-summary-title", "Payment summary"
-    assert_select ".app-customer-summary__copy", text: /No reply after three reminders/
+    assert_select ".app-customer-summary__copy", count: 0
     assert_select ".app-customer-summary__receivable", text: /INR 950 outstanding/
     assert_select ".app-customer-summary__receivable", text: /1 invoice/
     assert_select "#payment-pattern-title", "Invoice timing"
     assert_select "[data-testid='payment-history-event']", 2
     assert_select "[data-testid='payment-history-event']", text: /HARBOR-PAID.*5 days late/m
     assert_select "[data-testid='payment-history-event']", text: /HARBOR-OVERDUE.*102 days overdue/m
-    assert_select "#conversation", text: /Conversation/
-    assert_select "#conversation", text: /No response after three reminders/
+    assert_select "#conversation", count: 0
+    assert_select "body", { text: /reminder|reply|escalate/i, count: 0 }
     assert_select "#open-invoices, #customer-invoices, [data-testid='customer-recommendation']", count: 0
     assert_select "body", { text: "Other Customer", count: 0 }
   end
@@ -72,7 +72,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select ".app-page-subtitle", "Customer segment: Pays on time"
-    assert_select ".app-customer-header .app-collection-status", "In progress"
+    assert_select ".app-customer-header .app-invoice-status", "Outstanding"
     assert_select "[data-testid='payment-history-event']", 4
     assert_select "[data-testid='payment-history-event']", text: /UNUSUAL.*183 days early/m
     assert_select "[data-testid='payment-history-event']", text: /TYPICAL-1.*On due date/m
@@ -80,7 +80,7 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     assert_select "[data-testid='payment-history-event']", text: /CURRENT.*Due in 14 days/m
   end
 
-  test "show keeps an uncontacted customer's conversation empty and qualifies each outstanding currency" do
+  test "show qualifies each outstanding currency without prototype communication content" do
     account = sign_up_and_complete(email_address: "owner-generic-customer@example.com")
     source = create_invoice_source(account)
     customer_invoice = create_invoice(
@@ -107,9 +107,9 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     assert_select ".app-customer-summary__receivable .app-currency-total", 2
     assert_select ".app-customer-summary__receivable .app-currency-total", "INR 100 outstanding"
     assert_select ".app-customer-summary__receivable .app-currency-total", "USD 200 outstanding"
-    assert_select "#conversation .app-empty-inline", "No message or payment activity yet"
-    assert_select "#conversation .app-conversation-event", count: 0
-    assert_select "#conversation", { text: /Invoice shared|was emailed|Jul 3/, count: 0 }
+    assert_select ".app-customer-summary__copy", count: 0
+    assert_select "#conversation", count: 0
+    assert_select "body", { text: /message|reminder|reply/i, count: 0 }
   end
 
   test "show identifies a paid invoice when the provider omits its payment date" do
@@ -155,10 +155,11 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_select ".app-customer-header .app-collection-status", "Open"
-    assert_select ".app-customer-summary__copy", "1 invoice remains open with no balance due. No collection follow-up is scheduled."
+    assert_select ".app-customer-header .app-invoice-status", "Open"
+    assert_select ".app-customer-summary__copy", count: 0
     assert_select ".app-customer-summary__receivable", text: /No balance due.*1 open invoice/m
     assert_select "body", { text: "Paid in full", count: 0 }
+    assert_select "body", { text: /collection follow-up|reminder|reply/i, count: 0 }
     assert_select "[data-testid='payment-history-event']", text: /OPEN-ZERO.*Open.*no balance due.*No balance due/m
     assert_select "[data-testid='payment-history-event'] .app-payment-event__marker", count: 0
   end
@@ -193,16 +194,16 @@ class CustomersControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_response :success
-    assert_select ".app-customer-header .app-collection-status", "Uncollectible"
-    assert_select ".app-customer-summary__copy", "1 invoice is marked uncollectible. No collection follow-up is scheduled."
+    assert_select ".app-customer-header .app-invoice-status", "Uncollectible"
+    assert_select ".app-customer-summary__copy", count: 0
     assert_select ".app-customer-summary__receivable", text: /INR 300 uncollectible/
-    assert_select ".app-customer-summary__receivable", text: /1 invoice/
+    assert_select ".app-customer-summary__receivable", text: /1 uncollectible invoice/
     assert_select "body", { text: "Paid in full", count: 0 }
     assert_select "[data-testid='payment-history-event']", text: /CLOSED-UNCOLLECTIBLE.*Uncollectible/m
     uncollectible_event = css_select("[data-testid='payment-history-event']").find { |event| event.text.include?("CLOSED-UNCOLLECTIBLE") }
     assert_nil uncollectible_event.at_css(".app-payment-event__marker")
-    assert_select "#conversation .app-customer-card__conversation-state", "Uncollectible"
-    assert_select "#conversation .app-empty-inline", "1 invoice is marked uncollectible. No collection follow-up is scheduled."
+    assert_select "#conversation", count: 0
+    assert_select "body", { text: /collection follow-up|reminder|reply/i, count: 0 }
   end
 
   test "show does not expose another account customer" do

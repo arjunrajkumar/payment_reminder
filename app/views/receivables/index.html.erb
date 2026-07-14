@@ -41,9 +41,7 @@
     <p>Draft, awaiting approval, deleted, and voided invoices are not included. Approve an invoice with your provider, then refresh.</p>
   </section>
 <% else %>
-  <% inbox_customers = customer_inbox_customers(@inbox_customers) %>
-
-  <section class="app-customer-inbox" id="collection-priorities">
+  <section class="app-customer-inbox" id="customer-inbox">
     <div class="app-card app-table-card">
       <div class="app-table-wrap">
         <table class="app-data-table app-customer-table app-customer-inbox__table">
@@ -51,12 +49,11 @@
             <tr>
               <th scope="col">Customer</th>
               <th scope="col">Receivable</th>
-              <th scope="col">Payment summary</th>
               <th scope="col">Status</th>
             </tr>
           </thead>
           <tbody>
-            <%= render partial: "customers/inbox_row", collection: inbox_customers, as: :customer %>
+            <%= render partial: "customers/inbox_row", collection: @inbox_customers, as: :customer %>
           </tbody>
         </table>
       </div>

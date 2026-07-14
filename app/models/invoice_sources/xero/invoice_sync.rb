@@ -1,7 +1,7 @@
 module InvoiceSources
   class Xero
     class InvoiceSync
-      RECEIVABLE_INVOICE_FILTER = 'Type=="ACCREC"'.freeze
+      SALES_INVOICE_FILTER = 'Type=="ACCREC"'.freeze
 
       def initialize(source, client: OauthClient.new)
         @source = source
@@ -12,7 +12,7 @@ module InvoiceSources
         payload = client.invoices(
           access_token: source.access_token,
           tenant_id: source.external_account_id,
-          where: RECEIVABLE_INVOICE_FILTER
+          where: SALES_INVOICE_FILTER
         )
 
         Array(payload.fetch("Invoices", [])).each do |invoice_payload|
@@ -43,7 +43,7 @@ module InvoiceSources
         attr_reader :source, :client
 
         def sync_invoice!(payload)
-          return unless receivable_invoice?(payload)
+          return unless sales_invoice?(payload)
 
           invoice_external_id = payload.fetch("InvoiceID")
           contact = payload["Contact"].is_a?(Hash) ? payload["Contact"] : {}
@@ -87,7 +87,7 @@ module InvoiceSources
           end
         end
 
-        def receivable_invoice?(payload)
+        def sales_invoice?(payload)
           payload["Type"].to_s.casecmp?("ACCREC")
         end
 

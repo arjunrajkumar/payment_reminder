@@ -1,13 +1,14 @@
-class Receivables::Dashboard
-  attr_reader :as_of
+module Customer::Invoicing
+  extend ActiveSupport::Concern
 
-  def initialize(invoices, as_of: Date.current)
-    @invoices = invoices
-    @as_of = as_of
+  included do
+    has_many :issued_invoices, -> { issued.recent }, class_name: "Invoice"
+
+    scope :with_issued_invoices, -> { joins(:invoices).merge(Invoice.issued).distinct }
   end
 
-  def issued_invoices
-    @invoices
+  def as_of
+    @as_of ||= Date.current
   end
 
   def outstanding_invoices
@@ -38,6 +39,16 @@ class Receivables::Dashboard
 
   def uncollectible_totals
     totals_for(uncollectible_invoices, &:amount_due)
+  end
+
+  def next_expected_invoice
+    outstanding_invoices.min_by { |invoice| invoice.due_on || Date.new(9999, 12, 31) }
+  end
+
+  def oldest_overdue_days
+    overdue_invoices.filter_map do |invoice|
+      (as_of - invoice.due_on).to_i if invoice.due_on
+    end.max
   end
 
   private

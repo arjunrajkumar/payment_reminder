@@ -28,14 +28,6 @@ class Customers::PayerProfileTest < ActiveSupport::TestCase
     assert_equal "Unreliable payer", category.fetch(:name)
   end
 
-  test "supports a deliberate category override for prototype customer data" do
-    customer = customer_with(history: 0, on_time_rate: nil, days_from_due: nil)
-
-    category = Customers::PayerProfile.new(customer, override: { key: :slow_payer }).to_h
-
-    assert_equal Customers::PayerProfile::CATEGORIES.fetch(:slow_payer), category
-  end
-
   private
     def category_for(history:, on_time_rate:, days_from_due:, confidence: "Medium")
       Customers::PayerProfile.new(

@@ -30,7 +30,7 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_includes invoice.errors[:external_id], "has already been taken"
   end
 
-  test "classifies canonical receivable statuses" do
+  test "classifies canonical invoice statuses" do
     open = Invoice.new(status: "open", amount_due: 100)
     paid = Invoice.new(status: "paid", amount_due: 0, amount_paid: 100)
     uncollectible = Invoice.new(status: "uncollectible", amount_due: 100)

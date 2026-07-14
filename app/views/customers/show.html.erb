@@ -1,9 +1,7 @@
 <% @page_title = @customer.name %>
 <% @body_class = "app-workspace" %>
-<% communication = communication_preview_for(@customer) %>
-<% communication_thread = communication_thread_for(@customer) %>
-<% payer_profile = payer_profile_for(@customer) %>
-<% collection_status = collection_status_for(@customer, preview: communication) %>
+<% payer_profile = customer_payer_profile(@customer) %>
+<% invoice_status = customer_invoice_status(@customer) %>
 <% timing_events = @customer.invoice_timing_events %>
 <% outstanding_invoice_count = @customer.outstanding_invoices.size %>
 <% open_invoice_count = @customer.open_invoices.size %>
@@ -23,12 +21,11 @@
     <p class="app-page-subtitle">Customer segment: <%= payer_profile.fetch(:name) %></p>
   </div>
 
-  <span class="app-collection-status app-collection-status--<%= collection_status.fetch(:tone) %>"><%= collection_status.fetch(:label) %></span>
+  <span class="app-invoice-status app-invoice-status--<%= invoice_status.fetch(:tone) %>"><%= invoice_status.fetch(:label) %></span>
 </header>
 
 <section class="app-card app-customer-summary" aria-labelledby="payment-summary-title">
   <h2 id="payment-summary-title" class="app-card__title">Payment summary</h2>
-  <p class="app-customer-summary__copy"><%= communication.fetch(:summary) %></p>
 
   <div class="app-customer-summary__receivable" aria-label="Receivable context">
     <% if outstanding_invoice_count.positive? %>
@@ -47,20 +44,20 @@
         <span aria-hidden="true">·</span>
         <span><%= pluralize(uncollectible_invoice_count, "uncollectible invoice") %></span>
       <% end %>
+    <% elsif uncollectible_invoice_count.positive? %>
+      <strong><%= receivable_totals(@customer.uncollectible_totals, qualifier: "uncollectible") %></strong>
+      <span aria-hidden="true">·</span>
+      <span><%= pluralize(uncollectible_invoice_count, "uncollectible invoice") %></span>
+      <span aria-hidden="true">·</span>
+      <span>No collection due</span>
+      <% if open_invoice_count.positive? %>
+        <span aria-hidden="true">·</span>
+        <span><%= pluralize(open_invoice_count, "open invoice") %> with no balance due</span>
+      <% end %>
     <% elsif open_invoice_count.positive? %>
       <strong>No balance due</strong>
       <span aria-hidden="true">·</span>
       <span><%= pluralize(open_invoice_count, "open invoice") %></span>
-      <% if uncollectible_invoice_count.positive? %>
-        <span aria-hidden="true">·</span>
-        <span><%= pluralize(uncollectible_invoice_count, "uncollectible invoice") %></span>
-      <% end %>
-    <% elsif uncollectible_invoice_count.positive? %>
-      <strong><%= receivable_totals(@customer.uncollectible_totals, qualifier: "uncollectible") %></strong>
-      <span aria-hidden="true">·</span>
-      <span><%= pluralize(uncollectible_invoice_count, "invoice") %></span>
-      <span aria-hidden="true">·</span>
-      <span>No collection due</span>
     <% else %>
       <strong>Paid in full</strong>
       <span aria-hidden="true">·</span>
@@ -111,30 +108,5 @@
     </div>
   <% else %>
     <div class="app-empty-inline app-payment-history__empty">Invoice timing will appear when an invoice has a due date.</div>
-  <% end %>
-</section>
-
-<section id="conversation" class="app-card app-conversation" aria-labelledby="conversation-title">
-  <header class="app-conversation__header">
-    <h2 id="conversation-title" class="app-card__title">Conversation</h2>
-    <strong class="app-customer-card__conversation-state app-customer-card__conversation-state--<%= communication.fetch(:tone) %>"><%= communication.fetch(:status) %></strong>
-  </header>
-
-  <% if communication_thread.any? %>
-    <ol class="app-conversation-thread" aria-label="Conversation events">
-      <% communication_thread.each do |event| %>
-        <% event_kind_label = { incoming: "Incoming", outgoing: "Outgoing", system: "System", scheduled: "Scheduled" }.fetch(event.fetch(:kind)) { event.fetch(:kind).to_s.humanize } %>
-        <li class="app-conversation-event app-conversation-event--<%= event.fetch(:kind) %>">
-          <div class="app-conversation-event__meta">
-            <span class="app-conversation-event__kind"><%= event_kind_label %></span>
-            <strong><%= event.fetch(:label) %></strong>
-            <span><%= event.fetch(:timestamp) %></span>
-          </div>
-          <p><%= event.fetch(:body) %></p>
-        </li>
-      <% end %>
-    </ol>
-  <% else %>
-    <div class="app-empty-inline"><%= communication.fetch(:activity).description %></div>
   <% end %>
 </section>

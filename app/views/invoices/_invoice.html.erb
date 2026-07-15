@@ -1,0 +1,18 @@
+<tr data-testid="invoice-row">
+  <td class="app-customer-card__identity" data-label="Company">
+    <div class="app-customer-card__identity-copy">
+      <strong class="app-customer-card__name"><%= invoice.customer&.name || invoice.contact_name.presence || "Unknown company" %></strong>
+      <% if invoice.customer %>
+        <span class="app-customer-card__payer-segment"><%= invoice.customer.payer_segment.humanize %></span>
+      <% end %>
+    </div>
+  </td>
+  <td data-label="Invoice due">
+    <div class="app-invoice-card__amount"><%= invoice_amount_payable(invoice) %></div>
+    <% due_timing = invoice_due_timing(invoice, as_of: as_of) %>
+    <div class="app-table-note app-invoice-card__summary"><span class="app-invoice-card__number"><%= invoice_identifier(invoice) %></span><%= " #{due_timing}" if due_timing %></div>
+  </td>
+  <td class="app-invoice-card__status" data-label="Status">
+    <span class="app-invoice-status app-invoice-status--<%= invoice_status_tone(invoice, as_of: as_of) %>"><%= invoice.status.humanize %></span>
+  </td>
+</tr>

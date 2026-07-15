@@ -1,19 +1,21 @@
 require "application_system_test_case"
 
 class CoreFlowsTest < ApplicationSystemTestCase
-  test "signs up and reviews receivables through account settings" do
+  test "signs up and reviews invoices through account settings" do
     sign_up
     account = Identity.find_by!(email_address: "system-flow@example.com").accounts.first
     create_invoice_history(account)
 
-    click_link "Receivables"
+    click_link "Invoices"
 
-    assert_text "Receivables"
-    within "[data-testid='customer-inbox-row']" do
+    assert_text "Invoices"
+    within "[data-testid='invoice-row']", text: "INV-SYSTEM-OVERDUE" do
+      assert_selector "td[data-label='Invoice due'] .app-invoice-card__number", text: "INV-SYSTEM-OVERDUE"
       assert_text "Harbor & Co"
+      assert_text "Slow payer"
       assert_text "USD 50,000"
-      assert_selector ".app-receivable-status", text: "Needs attention"
-      assert_no_link "Harbor & Co"
+      assert_text "INV-SYSTEM-OVERDUE 40 days overdue"
+      assert_selector ".app-invoice-status", text: "Open"
     end
 
     click_link "Settings"
@@ -25,6 +27,26 @@ class CoreFlowsTest < ApplicationSystemTestCase
 
     click_button "Sign out"
     assert_text "Sign in"
+  end
+
+  test "returning user signs in and lands on invoices" do
+    identity = Identity.create!(email_address: "returning-system@example.com")
+    Account.create_with_owner(
+      account: { name: "Returning System Account" },
+      owner: { name: "Returning System User", identity: identity }
+    )
+
+    visit new_session_path
+    fill_in "email_address", with: identity.email_address
+    click_button "Send code"
+
+    assert_text "Check your email"
+    fill_in "code", with: MagicLink.order(:created_at).last.code
+    click_button "Continue"
+
+    assert_current_path invoices_path
+    assert_selector "h1", text: "Invoices"
+    assert_no_text "Check your email"
   end
 
   private
@@ -58,7 +80,8 @@ class CoreFlowsTest < ApplicationSystemTestCase
       customer = source.customers.create!(
         account: account,
         external_id: "system-flow-contact",
-        name: "Harbor & Co"
+        name: "Harbor & Co",
+        payer_segment: :slow_payer
       )
 
       source.invoices.create!(
@@ -99,7 +122,5 @@ class CoreFlowsTest < ApplicationSystemTestCase
         contact_name: "Harbor & Co",
         synced_at: Time.current
       )
-
-      Receivable.refresh_for!(customer)
     end
 end

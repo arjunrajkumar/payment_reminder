@@ -27,6 +27,11 @@ module Account::PayerSegment
     validate :unreliable_rate_is_below_pays_on_time_rate
   end
 
+  def refresh_payer_segments!
+    customers.find_each(&:refresh_payer_segment!)
+    self
+  end
+
   private
     def unreliable_history_covers_minimum_history
       return if payer_segment_minimum_payment_history.nil? || payer_segment_minimum_unreliable_history.nil?

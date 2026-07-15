@@ -1,8 +1,8 @@
-<%= turbo_frame_tag "receivables-next-page",
+<%= turbo_frame_tag "invoices-next-page",
   loading: :lazy,
-  src: home_path(page: page, format: :turbo_stream),
+  src: invoices_path(page: page, format: :turbo_stream),
   class: "app-inbox-pagination",
   aria: { live: "polite" } do %>
   <span class="app-inbox-pagination__spinner" aria-hidden="true"></span>
-  <span>Loading more receivables…</span>
+  <span>Loading more invoices…</span>
 <% end %>

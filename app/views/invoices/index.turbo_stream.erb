@@ -1,0 +1,11 @@
+<%= turbo_stream.append "invoice-rows" do %>
+  <%= render partial: "invoices/invoice", collection: @invoices, locals: { as_of: @as_of } %>
+<% end %>
+
+<% if @page.last? %>
+  <%= turbo_stream.remove "invoices-next-page" %>
+<% else %>
+  <%= turbo_stream.replace "invoices-next-page" do %>
+    <%= render "invoices/next_page", page: @page.next_param %>
+  <% end %>
+<% end %>

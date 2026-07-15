@@ -88,6 +88,28 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_equal [ open ], invoices.overdue(as_of: as_of)
   end
 
+  test "orders the invoice index with problematic invoices first" do
+    source = invoice_sources(:xero)
+    as_of = Date.new(2026, 7, 15)
+
+    paid = create_index_invoice(source, "paid", company: "Acme Paid", status: "paid", amount_due: 0, due_on: as_of - 1.month)
+    current_beta = create_index_invoice(source, "current-beta", company: "Beta Current", status: "open", amount_due: 100, due_on: as_of + 1.week)
+    pending = create_index_invoice(source, "pending", company: "Acme Pending", status: "pending", amount_due: 100, due_on: as_of + 2.weeks)
+    overdue = create_index_invoice(source, "overdue", company: "Zeta Overdue", status: "open", amount_due: 100, due_on: as_of - 1.day)
+    void = create_index_invoice(source, "void", company: "Acme Void", status: "void", amount_due: 0, due_on: as_of - 2.months)
+    uncollectible = create_index_invoice(source, "uncollectible", company: "Zeta Uncollectible", status: "uncollectible", amount_due: 100, due_on: as_of - 1.month)
+    current_alpha = create_index_invoice(source, "current-alpha", company: "Alpha Current", status: "open", amount_due: 100, due_on: as_of + 1.week)
+    unknown = create_index_invoice(source, "unknown", company: "Zeta Unknown", status: "unknown", amount_due: 100, due_on: as_of)
+
+    invoices = source.invoices.where(id: [ paid, current_beta, pending, overdue, void, uncollectible, current_alpha, unknown ])
+
+    assert_kind_of ActiveRecord::Relation, invoices.for_index(as_of: as_of)
+    assert_equal(
+      [ overdue, uncollectible, unknown, current_alpha, current_beta, pending, paid, void ],
+      invoices.for_index(as_of: as_of).to_a
+    )
+  end
+
   private
     def create_invoice(source, status, amount_due:, due_on:, amount_paid: 0, paid_on: nil)
       source.invoices.create!(
@@ -103,6 +125,30 @@ class InvoiceTest < ActiveSupport::TestCase
         total: amount_due + amount_paid,
         due_on: due_on,
         paid_on: paid_on
+      )
+    end
+
+    def create_index_invoice(source, external_id, company:, status:, amount_due:, due_on:)
+      customer = source.customers.create!(
+        account: source.account,
+        external_id: "customer-#{external_id}",
+        name: company
+      )
+
+      source.invoices.create!(
+        account: source.account,
+        customer: customer,
+        external_id: external_id,
+        number: "INV-#{external_id.upcase}",
+        invoice_type: "ACCREC",
+        provider_status: status,
+        status: status,
+        currency: "USD",
+        amount_due: amount_due,
+        amount_paid: 0,
+        total: amount_due,
+        issued_on: Date.new(2026, 7, 1),
+        due_on: due_on
       )
     end
 end

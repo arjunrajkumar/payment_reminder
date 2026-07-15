@@ -7,18 +7,18 @@ class LandingControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to "https://www.paymentreminderemails.com"
   end
 
-  test "home requires a PaymentReminder session" do
-    get home_url
+  test "invoices require a PaymentReminder session" do
+    get invoices_url
 
     assert_redirected_to new_session_url(script_name: nil)
   end
 
-  test "root redirects signed in accounts to home" do
+  test "root redirects signed in accounts to invoices" do
     sign_up_and_complete
 
     get root_url
 
-    assert_redirected_to home_url
+    assert_redirected_to invoices_url
   end
 
   private

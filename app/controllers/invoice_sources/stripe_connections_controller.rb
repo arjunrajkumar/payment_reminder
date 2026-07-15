@@ -16,7 +16,7 @@ module InvoiceSources
       @invoice_source.sync_invoices!
       session.delete(:stripe_oauth_state)
 
-      redirect_to home_path, notice: "Stripe connected."
+      redirect_to invoices_path, notice: "Stripe connected."
     rescue InvoiceSources::Stripe::OauthClient::Error => error
       handle_stripe_error(error)
     end

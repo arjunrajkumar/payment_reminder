@@ -45,7 +45,7 @@ class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     source = account.invoice_sources.stripe.first
 
-    assert_redirected_to home_url
+    assert_redirected_to invoices_url
     assert_predicate source, :active?
     assert_equal "deprecated-access-token", source.access_token
     assert_nil source.refresh_token

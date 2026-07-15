@@ -76,7 +76,7 @@ class InvoiceSource < ApplicationRecord
 
   def sync_invoices!
     provider_adapter.sync_invoices!
-    customers.find_each { |customer| Receivable.refresh_for!(customer) }
+    customers.find_each(&:refresh_payer_segment!)
   end
 
   def sync_invoice!(...)

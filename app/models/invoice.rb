@@ -28,6 +28,25 @@ class Invoice < ApplicationRecord
   scope :uncollectible, -> { where(status: :uncollectible) }
   scope :overdue, ->(as_of:) { outstanding.where(due_on: ...as_of) }
 
+  scope :for_index, ->(as_of: Date.current) do
+    priority = Arel::Nodes::Case.new
+      .when(
+        arel_table[:status].eq("open")
+          .and(arel_table[:amount_due].gt(0))
+          .and(arel_table[:due_on].lt(as_of))
+      ).then(0)
+      .when(arel_table[:status].eq("uncollectible")).then(1)
+      .when(arel_table[:status].eq("unknown")).then(2)
+      .when(arel_table[:status].eq("open")).then(3)
+      .when(arel_table[:status].eq("pending")).then(4)
+      .when(arel_table[:status].eq("paid")).then(5)
+      .when(arel_table[:status].eq("void")).then(6)
+      .else(7)
+
+    eager_load(:customer)
+      .order(priority.asc, Customer.arel_table[:name].asc, arel_table[:id].asc)
+  end
+
   def issued?
     status.in?(ISSUED_STATUSES)
   end

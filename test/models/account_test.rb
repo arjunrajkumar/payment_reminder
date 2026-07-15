@@ -112,4 +112,22 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes account.errors[:payer_segment_minimum_unreliable_history], "must be at least the minimum payment history"
     assert_includes account.errors[:payer_segment_unreliable_on_time_rate], "must be lower than the pays-on-time rate"
   end
+
+  test "refreshes every customer payer segment" do
+    account = Account.create!(name: "Segment Refresh Account")
+    source = account.invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "segment-refresh-source"
+    )
+    source.customers.create!(
+      account: account,
+      external_id: "segment-refresh-customer",
+      name: "Segment Refresh Customer"
+    )
+
+    Customer.any_instance.expects(:refresh_payer_segment!).once
+
+    assert_same account, account.refresh_payer_segments!
+  end
 end

@@ -9,7 +9,7 @@ class Account::CustomerSegmentRefreshesControllerTest < ActionDispatch::Integrat
 
   test "create refreshes customer segments for the current account" do
     account = sign_up_and_complete
-    Receivable.expects(:refresh_for_account!).with(account)
+    Account.any_instance.expects(:refresh_payer_segments!).once
 
     post account_customer_segment_refresh_url(script_name: account.slug)
 

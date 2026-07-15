@@ -45,7 +45,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     source = account.invoice_sources.xero.first
 
-    assert_redirected_to home_url
+    assert_redirected_to invoices_url
     assert_predicate source, :active?
     assert_equal "access-token", source.access_token
     assert_equal "refresh-token", source.refresh_token

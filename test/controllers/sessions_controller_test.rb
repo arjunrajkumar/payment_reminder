@@ -22,6 +22,17 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate MagicLink.last, :for_sign_in?
   end
 
+  test "magic link code submission uses a full-page request" do
+    account = sign_up_and_complete(email_address: "full-page-code@example.com")
+    identity = account.users.owner.first.identity
+    delete session_url(script_name: nil)
+
+    post session_url(script_name: nil), params: { email_address: identity.email_address }
+    follow_redirect!
+
+    assert_select "form[action='#{session_magic_link_path}'][data-turbo='false']"
+  end
+
   test "create redirects unknown email addresses back to sign in" do
     assert_no_difference -> { Identity.count } do
       assert_no_difference -> { MagicLink.count } do

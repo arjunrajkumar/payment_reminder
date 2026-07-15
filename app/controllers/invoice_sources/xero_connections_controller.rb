@@ -16,7 +16,7 @@ module InvoiceSources
       @invoice_source.sync_invoices!
       session.delete(:xero_oauth_state)
 
-      redirect_to home_path, notice: "Xero connected."
+      redirect_to invoices_path, notice: "Xero connected."
     rescue InvoiceSources::Xero::OauthClient::Error => error
       handle_xero_error(error)
     end

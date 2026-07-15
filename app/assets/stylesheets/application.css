@@ -448,10 +448,6 @@ body.public {
   line-height: 1.75rem;
 }
 
-.app-currency-total {
-  white-space: nowrap;
-}
-
 .app-table-card {
   background: var(--color-surface);
   margin-top: 1.5rem;
@@ -997,12 +993,16 @@ body.app-workspace {
   color: #273447;
 }
 
-/* Customer inbox table. */
-.app-workspace .app-customer-inbox {
+/* Invoice index. */
+.app-workspace .app-invoice-index {
   margin-top: 1rem;
 }
 
-.app-workspace .app-customer-inbox .app-table-card {
+.app-workspace .app-invoices-header--compact {
+  margin-bottom: 0.5rem;
+}
+
+.app-workspace .app-invoice-index .app-table-card {
   margin-top: 0;
   background: var(--color-surface);
   box-shadow: none;
@@ -1034,7 +1034,7 @@ body.app-workspace {
   }
 }
 
-.app-workspace .app-customer-inbox__table thead tr {
+.app-workspace .app-invoice-table thead tr {
   border-bottom-color: var(--color-border-strong);
   background: linear-gradient(115deg, #f5f6f5 0%, var(--color-table-head) 100%);
   color: var(--color-text);
@@ -1043,45 +1043,47 @@ body.app-workspace {
   line-height: 1.5rem;
 }
 
-.app-workspace .app-customer-table {
+.app-workspace .app-invoice-table {
   min-width: 0;
   table-layout: fixed;
 }
 
-.app-workspace .app-customer-table th,
-.app-workspace .app-customer-table td {
+.app-workspace .app-invoice-table th,
+.app-workspace .app-invoice-table td {
   padding: 0.875rem 1rem;
   overflow-wrap: anywhere;
 }
 
-.app-workspace .app-customer-table th {
+.app-workspace .app-invoice-table th {
   font-size: 1rem;
   font-weight: 600;
   line-height: 1.5rem;
 }
 
-.app-workspace .app-customer-table td {
+.app-workspace .app-invoice-table td {
   font-size: 1rem;
   font-weight: 400;
   line-height: 1.5rem;
 }
 
-.app-workspace .app-customer-table th:nth-child(1),
-.app-workspace .app-customer-table td:nth-child(1) {
+.app-workspace .app-invoice-table th:nth-child(1),
+.app-workspace .app-invoice-table td:nth-child(1) {
   width: 38%;
 }
 
-.app-workspace .app-customer-table th:nth-child(2),
-.app-workspace .app-customer-table td:nth-child(2) {
+.app-workspace .app-invoice-table th:nth-child(2),
+.app-workspace .app-invoice-table td:nth-child(2) {
   width: 40%;
 }
 
-.app-workspace .app-customer-table th:nth-child(3),
-.app-workspace .app-customer-table td:nth-child(3) {
+.app-workspace .app-invoice-table th:nth-child(3),
+.app-workspace .app-invoice-table td:nth-child(3) {
   width: 22%;
 }
 
+.app-workspace .app-invoice-card__amount,
 .app-workspace .app-customer-card__name {
+  color: var(--color-text-soft);
   font-size: 1rem;
   font-weight: 500;
   line-height: 1.5rem;
@@ -1092,18 +1094,6 @@ body.app-workspace {
   gap: 0.15rem;
 }
 
-.app-workspace .app-receivables-header--compact {
-  margin-bottom: 0.5rem;
-}
-
-.app-workspace .app-customer-card__amount {
-  display: block;
-  color: var(--color-text-soft);
-  font-size: 1rem;
-  font-weight: 500;
-  line-height: 1.5rem;
-}
-
 .app-workspace .app-customer-card__payer-segment {
   display: block;
   color: var(--color-text-muted);
@@ -1112,11 +1102,17 @@ body.app-workspace {
   line-height: 1rem;
 }
 
-.app-workspace .app-customer-card__receivable-context {
+.app-workspace .app-invoice-card__summary {
   margin-top: 0.35rem;
 }
 
-.app-workspace .app-receivable-status {
+.app-workspace .app-invoice-index .app-table-note {
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1rem;
+}
+
+.app-workspace .app-invoice-status {
   display: inline-flex;
   min-height: 2.25rem;
   align-items: center;
@@ -1134,7 +1130,7 @@ body.app-workspace {
   white-space: nowrap;
 }
 
-.app-workspace .app-receivable-status--unpaid {
+.app-workspace .app-invoice-status--unpaid {
   border-color: #d34f55;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1142,7 +1138,7 @@ body.app-workspace {
   color: #912b31;
 }
 
-.app-workspace .app-receivable-status--needs-attention {
+.app-workspace .app-invoice-status--needs-attention {
   border-color: #dda05f;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1150,7 +1146,7 @@ body.app-workspace {
   color: #925122;
 }
 
-.app-workspace .app-receivable-status--paid {
+.app-workspace .app-invoice-status--paid {
   border-color: #8bc997;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1158,7 +1154,7 @@ body.app-workspace {
   color: #2f7040;
 }
 
-.app-workspace .app-receivable-status--in-progress {
+.app-workspace .app-invoice-status--in-progress {
   border-color: #687b91;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1166,42 +1162,35 @@ body.app-workspace {
   color: #273447;
 }
 
-.app-workspace .app-customer-inbox .app-table-note {
-  font-size: 0.75rem;
-  font-weight: 400;
-  line-height: 1rem;
-}
-
-.app-workspace .app-customer-card__status {
+.app-workspace .app-invoice-card__status {
   vertical-align: middle;
 }
 
-/* Keep the inbox as one scrollable table on narrow screens. */
+/* Keep the index as one scrollable table on narrow screens. */
 @media (max-width: 69.99rem) {
-  .app-workspace .app-customer-inbox .app-customer-table {
+  .app-workspace .app-invoice-index .app-invoice-table {
     min-width: 40rem;
   }
 
-  .app-workspace .app-customer-inbox .app-customer-table th,
-  .app-workspace .app-customer-inbox .app-customer-table td {
+  .app-workspace .app-invoice-index .app-invoice-table th,
+  .app-workspace .app-invoice-index .app-invoice-table td {
     padding: 0.75rem;
     font-size: 0.75rem;
     line-height: 1.125rem;
     vertical-align: top;
   }
 
-  .app-workspace .app-customer-inbox .app-receivable-status {
+  .app-workspace .app-invoice-index .app-invoice-status {
     min-height: 2rem;
     font-size: 0.75rem;
     line-height: 1rem;
     padding: 0.4375rem 0.625rem;
   }
-
 }
 
 @media (min-width: 70rem) {
-  .app-workspace .app-customer-inbox .app-customer-table th:nth-child(3),
-  .app-workspace .app-customer-inbox .app-customer-table td:nth-child(3) {
+  .app-workspace .app-invoice-index .app-invoice-table th:nth-child(3),
+  .app-workspace .app-invoice-index .app-invoice-table td:nth-child(3) {
     padding-right: 0.75rem;
     padding-left: 0.75rem;
   }

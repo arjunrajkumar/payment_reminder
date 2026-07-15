@@ -35,12 +35,13 @@
   </div>
 
   <div id="application-navigation-links" class="app-nav-list" data-toggle-class-target="panel">
-    <%= link_to home_path, class: [ "app-nav-item", ("app-nav-item--active" if active == :home) ], aria: { current: ("page" if active == :home) } do %>
+    <%= link_to invoices_path, class: [ "app-nav-item", ("app-nav-item--active" if active == :invoices) ], aria: { current: ("page" if active == :invoices) } do %>
       <svg class="app-nav-item__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M4 4h16v16H4z"></path>
-        <path d="M4 13h4l2 3h4l2-3h4"></path>
+        <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path>
+        <path d="M9 8h6"></path>
+        <path d="M9 12h6"></path>
       </svg>
-      Receivables
+      Invoices
     <% end %>
 
     <%= link_to account_settings_path, class: [ "app-nav-item", ("app-nav-item--active" if active == :settings) ], aria: { current: ("page" if active == :settings) } do %>

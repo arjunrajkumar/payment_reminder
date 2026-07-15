@@ -1,15 +1,14 @@
-<% @page_title = "Receivables" %>
+<% @page_title = "Invoices" %>
 <% @body_class = "app-workspace" %>
-<% as_of = Date.current %>
 
-<%= render "receivables/nav", active: :home %>
+<%= render "layouts/shared/application_nav", active: :invoices %>
 
-<header class="app-page-header app-receivables-header--compact">
+<header class="app-page-header app-invoices-header--compact">
   <div class="app-page-header__content">
-    <h1 class="app-page-title">Receivables</h1>
+    <h1 class="app-page-title">Invoices</h1>
   </div>
 
-  <time class="app-period-label" datetime="<%= as_of.iso8601 %>">As of <%= as_of.strftime("%b %-d, %Y") %></time>
+  <time class="app-period-label" datetime="<%= @as_of.iso8601 %>">As of <%= @as_of.strftime("%b %-d, %Y") %></time>
 </header>
 
 <% if @invoice_sources.none? %>
@@ -21,10 +20,10 @@
       </svg>
     </div>
     <h2>Connect an invoice source</h2>
-    <p>Bring your Xero or Stripe invoices into PaymentReminder to see what is current, overdue, and paid.</p>
+    <p>Bring your Xero or Stripe invoices into PaymentReminder.</p>
     <%= link_to "Connect invoice source", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
   </section>
-<% elsif !Current.account.invoices.exists? %>
+<% elsif !@invoices.any? %>
   <section class="app-empty-state" data-testid="no-synced-invoices">
     <div class="app-empty-state__icon" aria-hidden="true">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -36,30 +35,25 @@
     <p>Open Settings to resync invoices from your connected source.</p>
     <%= link_to "Open Settings", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
   </section>
-<% elsif !@receivables.any? %>
-  <section class="app-empty-state" data-testid="no-issued-invoices">
-    <h2>No issued invoices yet</h2>
-    <p>Draft, awaiting approval, deleted, and voided invoices are not included. Approve an invoice with your provider, then refresh.</p>
-  </section>
 <% else %>
-  <section class="app-customer-inbox" id="customer-inbox">
+  <section class="app-invoice-index" id="invoice-index">
     <div class="app-card app-table-card">
       <div class="app-table-wrap">
-        <table class="app-data-table app-customer-table app-customer-inbox__table">
+        <table class="app-data-table app-invoice-table">
           <thead>
             <tr>
-              <th scope="col">Customer</th>
-              <th scope="col">Receivables</th>
+              <th scope="col">Company</th>
+              <th scope="col">Invoice due</th>
               <th scope="col">Status</th>
             </tr>
           </thead>
-          <tbody id="receivable-rows">
-            <%= render partial: "receivables/receivable", collection: @receivables, locals: { as_of: as_of } %>
+          <tbody id="invoice-rows">
+            <%= render partial: "invoices/invoice", collection: @invoices, locals: { as_of: @as_of } %>
           </tbody>
         </table>
       </div>
     </div>
 
-    <%= render "receivables/next_page", page: @page.next_param unless @page.last? %>
+    <%= render "invoices/next_page", page: @page.next_param unless @page.last? %>
   </section>
 <% end %>

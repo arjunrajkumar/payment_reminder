@@ -1,6 +1,6 @@
 Rails.application.routes.draw do
   root "landing#index"
-  get "/home", to: "receivables#index", as: :home
+  resources :invoices, only: :index
 
   scope module: :invoice_sources do
     get "xero/connect", to: "xero_connections#new", as: :new_xero_connection

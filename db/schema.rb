@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_010000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_15_120000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -38,8 +38,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_010000) do
     t.string "external_id", null: false
     t.bigint "invoice_source_id", null: false
     t.string "name", null: false
+    t.string "payer_segment", default: "new", null: false
     t.datetime "updated_at", null: false
     t.index ["account_id", "name"], name: "index_customers_on_account_id_and_name"
+    t.index ["account_id", "payer_segment"], name: "index_customers_on_account_id_and_payer_segment"
     t.index ["invoice_source_id", "external_id"], name: "index_customers_on_invoice_source_id_and_external_id", unique: true
   end
 
@@ -135,25 +137,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_010000) do
     t.index ["identity_id"], name: "index_magic_links_on_identity_id"
   end
 
-  create_table "receivables", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.bigint "account_id", null: false
-    t.datetime "calculated_at", null: false
-    t.datetime "created_at", null: false
-    t.bigint "customer_id", null: false
-    t.date "due_on"
-    t.integer "open_invoice_count", default: 0, null: false
-    t.integer "outstanding_invoice_count", default: 0, null: false
-    t.json "outstanding_totals", null: false
-    t.string "payer_segment", default: "new", null: false
-    t.string "status", default: "none", null: false
-    t.integer "uncollectible_invoice_count", default: 0, null: false
-    t.json "uncollectible_totals", null: false
-    t.datetime "updated_at", null: false
-    t.index ["account_id", "status"], name: "index_receivables_on_account_id_and_status"
-    t.index ["account_id"], name: "index_receivables_on_account_id"
-    t.index ["customer_id"], name: "index_receivables_on_customer_id", unique: true
-  end
-
   create_table "sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "identity_id", null: false
@@ -186,8 +169,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_010000) do
   add_foreign_key "invoices", "customers"
   add_foreign_key "invoices", "invoice_sources"
   add_foreign_key "magic_links", "identities"
-  add_foreign_key "receivables", "accounts"
-  add_foreign_key "receivables", "customers"
   add_foreign_key "sessions", "identities"
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities"

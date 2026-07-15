@@ -36,17 +36,18 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_select "#nav button[data-action='toggle-class#toggle'][aria-label='Toggle navigation']"
     assert_select "#nav a[aria-current='page']", "Receivables"
     assert_select "#main.app-main"
+    assert_select "[data-testid='receivable-status-tabs']", count: 0
     assert_select "table", count: 1
     assert_select "#customer-inbox table thead th", count: 3
     assert_equal(
-      [ "Customer", "Receivable", "Status" ],
+      [ "Customer", "Receivables", "Status" ],
       css_select("#customer-inbox table thead th").map { |heading| heading.text.squish }
     )
 
     customer_rows = css_select("#customer-inbox tbody tr")
     customer_names = customer_rows.map { |row| row.at_css(".app-customer-card__name").text.squish }
     assert_equal(
-      [ "Zeta Uncollectible", "Brightside Studio", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "PixelCraft Labs", "Cedar Works" ],
+      [ "Brightside Studio", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "PixelCraft Labs", "Cedar Works", "Zeta Uncollectible" ],
       customer_names
     )
 

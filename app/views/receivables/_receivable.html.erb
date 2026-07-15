@@ -1,4 +1,4 @@
-<% status = receivable_status(receivable, as_of: @as_of) %>
+<% status = receivable_status(receivable, as_of: as_of) %>
 
 <tr data-testid="customer-inbox-row">
   <td class="app-customer-card__identity" data-label="Customer">
@@ -8,7 +8,7 @@
     </div>
   </td>
 
-  <td data-label="Receivable">
+  <td data-label="Receivables">
     <strong class="app-customer-card__amount">
       <% if receivable.outstanding_invoice_count.positive? %>
         <%= receivable_totals(receivable.outstanding_totals) %>
@@ -22,7 +22,7 @@
     </strong>
     <div class="app-table-note app-customer-card__receivable-context">
       <% if receivable.outstanding_invoice_count.positive? %>
-        <%= receivable_due_context(receivable, as_of: @as_of) %>
+        <%= receivable_due_context(receivable, as_of: as_of) %>
       <% else %>
         No collection due
       <% end %>

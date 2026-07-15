@@ -1,16 +1,15 @@
 class Account::SettingsController < ApplicationController
   before_action :set_account
+  before_action :set_invoice_sources, only: :show
 
-  def show
-    load_invoice_sources
-  end
+  def show; end
 
   def update
     if @account.update(account_params)
       redirect_to account_settings_path(script_name: @account.slug),
         notice: "Customer segment rules saved. Refresh segments to apply them."
     else
-      load_invoice_sources
+      set_invoice_sources
       flash.delete(:notice)
       flash.now[:alert] = @account.errors.full_messages.to_sentence
       render :show, status: :unprocessable_entity
@@ -22,11 +21,11 @@ class Account::SettingsController < ApplicationController
       @account = Current.account
     end
 
-    def load_invoice_sources
+    def set_invoice_sources
       @invoice_sources = InvoiceSource.available_sources_for(@account)
     end
 
     def account_params
-      params.expect(account: Account::PAYER_SEGMENT_RULE_ATTRIBUTES)
+      params.expect(account: Account::PayerSegment::RULE_ATTRIBUTES)
     end
 end

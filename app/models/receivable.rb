@@ -17,6 +17,17 @@ class Receivable < ApplicationRecord
   validate :account_matches_customer
 
   scope :active, -> { where.not(status: :none) }
+  scope :for_inbox, ->(as_of: Date.current) do
+    status_order = Arel::Nodes::Case.new
+      .when(arel_table[:status].eq("outstanding").and(arel_table[:due_on].lt(as_of))).then(0)
+      .when(arel_table[:status].eq("outstanding")).then(1)
+      .when(arel_table[:status].eq("paid")).then(2)
+      .else(3)
+
+    active
+      .eager_load(:customer)
+      .order(status_order.asc, Customer.arel_table[:name].asc, arel_table[:id].asc)
+  end
 
   class << self
     def refresh_for!(customer)

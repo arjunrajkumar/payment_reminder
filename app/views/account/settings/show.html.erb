@@ -60,7 +60,7 @@
   <div class="app-segment-rules-card__header">
     <div>
       <h2 class="app-card__title">Customer segments</h2>
-      <p class="app-segment-rules-card__description">Choose how PaymentReminder labels customers from their recent payment history.</p>
+      <p class="app-segment-rules-card__description">Choose how Payment Reminder labels customers from their recent payment history.</p>
     </div>
 
     <%= button_to "Refresh segments",
@@ -89,7 +89,7 @@
               <div class="app-segment-rule-control">
                 <%= form.label :payer_segment_minimum_payment_history, "Minimum history" %>
                 <%= form.select :payer_segment_minimum_payment_history,
-                  Account::PAYER_SEGMENT_HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
+                  Account::PayerSegment::HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
                   {},
                   class: "app-select" %>
               </div>
@@ -102,16 +102,11 @@
               <div class="app-segment-rule-control">
                 <%= form.label :payer_segment_pays_on_time_rate, "On-time rate" %>
                 <%= form.select :payer_segment_pays_on_time_rate,
-                  Account::PAYER_SEGMENT_PAYS_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}% or more", rate ] },
+                  Account::PayerSegment::PAYS_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}% or more", rate ] },
                   {},
                   class: "app-select" %>
               </div>
             </td>
-          </tr>
-          <tr>
-            <td><strong>Sometimes late</strong></td>
-            <td>Payment timing does not match another segment.</td>
-            <td><span class="app-segment-rule-automatic">Automatic fallback</span></td>
           </tr>
           <tr>
             <td><strong>Slow payer</strong></td>
@@ -120,7 +115,7 @@
               <div class="app-segment-rule-control">
                 <%= form.label :payer_segment_slow_payer_days, "Typical delay" %>
                 <%= form.select :payer_segment_slow_payer_days,
-                  Account::PAYER_SEGMENT_SLOW_PAYER_DAYS_OPTIONS.map { |days| [ pluralize(days, "day"), days ] },
+                  Account::PayerSegment::SLOW_PAYER_DAYS_OPTIONS.map { |days| [ pluralize(days, "day"), days ] },
                   {},
                   class: "app-select" %>
               </div>
@@ -138,19 +133,24 @@
                 <div class="app-segment-rule-control">
                   <%= form.label :payer_segment_minimum_unreliable_history, "Minimum history" %>
                   <%= form.select :payer_segment_minimum_unreliable_history,
-                    Account::PAYER_SEGMENT_HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
+                    Account::PayerSegment::HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
                     {},
                     class: "app-select" %>
                 </div>
                 <div class="app-segment-rule-control">
                   <%= form.label :payer_segment_unreliable_on_time_rate, "On-time rate below" %>
                   <%= form.select :payer_segment_unreliable_on_time_rate,
-                    Account::PAYER_SEGMENT_UNRELIABLE_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
+                    Account::PayerSegment::UNRELIABLE_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
                     {},
                     class: "app-select" %>
                 </div>
               </div>
             </td>
+          </tr>
+          <tr>
+            <td><strong>Sometimes late</strong></td>
+            <td>Payment timing does not match another segment.</td>
+            <td><span class="app-segment-rule-automatic">Automatic fallback</span></td>
           </tr>
         </tbody>
       </table>

@@ -1,0 +1,13 @@
+<% as_of = Date.current %>
+
+<%= turbo_stream.append "receivable-rows" do %>
+  <%= render partial: "receivables/receivable", collection: @receivables, locals: { as_of: as_of } %>
+<% end %>
+
+<% if @page.last? %>
+  <%= turbo_stream.remove "receivables-next-page" %>
+<% else %>
+  <%= turbo_stream.replace "receivables-next-page" do %>
+    <%= render "receivables/next_page", page: @page.next_param %>
+  <% end %>
+<% end %>

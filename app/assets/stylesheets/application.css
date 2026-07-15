@@ -521,6 +521,11 @@ body.public {
   margin: 0;
 }
 
+.app-segment-rules-card {
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-card);
+}
+
 .app-segment-rules-card__header {
   display: flex;
   align-items: flex-start;
@@ -792,22 +797,23 @@ body.public {
 /* Product workspace presentation. */
 body.app-workspace {
   --font-heading: var(--font-sans);
-  --color-canvas: #f7f8fb;
-  --color-surface: #ffffff;
-  --color-nav: #ffffff;
+  --color-canvas: #fffff7;
+  --color-surface: #fffff7;
+  --color-nav: #f1f3f2;
   --color-text: #111827;
-  --color-text-soft: #101828;
+  --color-text-soft: #111827;
   --color-text-muted: #667085;
-  --color-border-strong: #d8dde7;
-  --color-card-border: #e2e6ee;
-  --color-row-border: #e8ebf1;
-  --color-table-head: #f8f9fb;
-  --color-accent: #315bea;
-  --color-accent-dark: #2447c6;
-  --color-accent-soft: #edf2ff;
-  --radius-card: 0.875rem;
-  --radius-control: 0.625rem;
-  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.04);
+  --color-text-subtle: #475467;
+  --color-border-strong: #c5cbc8;
+  --color-card-border: #c9cecc;
+  --color-row-border: #c9cecc;
+  --color-table-head: #f4f6f4;
+  --color-accent: #3652bd;
+  --color-accent-dark: #2c439e;
+  --color-accent-soft: #e7e9ef;
+  --radius-card: 0.75rem;
+  --radius-control: 0.5rem;
+  --shadow-card: none;
   background: var(--color-canvas);
 }
 
@@ -816,14 +822,8 @@ body.app-workspace {
 }
 
 .app-workspace .app-main {
-  background: var(--color-canvas);
+  background: linear-gradient(115deg, #fefff9 0%, var(--color-canvas) 52%, #fffef7 100%);
   padding: 1.25rem;
-}
-
-.app-workspace .app-main > * {
-  width: min(100%, 88rem);
-  margin-right: auto;
-  margin-left: auto;
 }
 
 .app-workspace .app-skip-link {
@@ -847,9 +847,9 @@ body.app-workspace {
 }
 
 .app-workspace #nav {
-  background: #ffffff;
-  border-color: var(--color-card-border);
-  box-shadow: 0 1px 0 rgba(16, 24, 40, 0.03);
+  background: linear-gradient(110deg, var(--color-nav) 0%, #f3f4f3 100%);
+  border-color: var(--color-border-strong);
+  box-shadow: none;
 }
 
 .app-workspace .app-logo svg {
@@ -858,9 +858,9 @@ body.app-workspace {
 
 .app-workspace .app-nav-item {
   min-height: 2.75rem;
-  border-radius: 0.625rem;
-  color: #475467;
-  font-weight: 550;
+  border-radius: var(--radius-control);
+  color: var(--color-text-soft);
+  font-weight: 500;
   transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
@@ -873,13 +873,13 @@ body.app-workspace {
 .app-workspace .app-nav-item--active {
   background: var(--color-accent-soft);
   color: var(--color-accent);
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .app-workspace .app-icon-button {
-  border-color: var(--color-card-border);
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+  box-shadow: none;
 }
 
 .app-workspace .app-icon-button:hover {
@@ -906,10 +906,10 @@ body.app-workspace {
 
 .app-workspace .app-page-title {
   color: var(--color-text-soft);
-  font-size: clamp(1.75rem, 3vw, 2.375rem);
-  font-weight: 720;
-  letter-spacing: -0.04em;
-  line-height: 1.08;
+  font-size: 1.5rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  line-height: 2rem;
 }
 
 .app-workspace .app-period-label {
@@ -952,7 +952,7 @@ body.app-workspace {
 
 .app-workspace .app-secondary-button {
   border-color: var(--color-border-strong);
-  background: #ffffff;
+  background: var(--color-surface);
 }
 
 .app-workspace .app-secondary-button:hover {
@@ -961,13 +961,13 @@ body.app-workspace {
   transform: translateY(-1px);
 }
 
-/* Quiet, flat status language. */
+/* Glossy status treatment from the original workspace palette. */
 .app-workspace .app-pill {
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: #f2f4f7;
-  box-shadow: none;
-  color: #475467;
+  border-radius: 9999px;
+  background-blend-mode: screen, normal;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.025);
   font-size: 0.75rem;
   font-weight: 650;
   line-height: 1rem;
@@ -975,15 +975,19 @@ body.app-workspace {
 }
 
 .app-workspace .app-pill--green {
-  border-color: #b7e2c1;
-  background: #ecf9ef;
-  color: #23693b;
+  border: 1px solid #8bc997;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #d0edd6 0%, #bee6c7 52%, #adddb9 100%);
+  color: #2f7040;
 }
 
 .app-workspace .app-pill--slate {
-  border-color: #d6dbe5;
-  background: #f3f5f8;
-  color: #475467;
+  border: 1px solid #687b91;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #c8d5de 0%, #b7c6d1 52%, #a7b8c6 100%);
+  color: #273447;
 }
 
 /* Customer inbox table. */
@@ -997,13 +1001,39 @@ body.app-workspace {
   box-shadow: none;
 }
 
-.app-workspace .app-customer-inbox__table thead tr {
-  border-bottom-color: var(--color-row-border);
-  background: var(--color-surface);
-  color: #344054;
-  font-family: inherit;
+.app-workspace .app-inbox-pagination {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   line-height: 1.25rem;
+}
+
+.app-workspace .app-inbox-pagination__spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--color-row-border);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: app-inbox-pagination-spin 0.8s linear infinite;
+}
+
+@keyframes app-inbox-pagination-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-workspace .app-customer-inbox__table thead tr {
+  border-bottom-color: var(--color-border-strong);
+  background: linear-gradient(115deg, #f5f6f5 0%, var(--color-table-head) 100%);
+  color: var(--color-text);
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  line-height: 1.5rem;
 }
 
 .app-workspace .app-customer-table {
@@ -1018,14 +1048,15 @@ body.app-workspace {
 }
 
 .app-workspace .app-customer-table th {
-  font-size: 0.8125rem;
+  font-size: 1rem;
   font-weight: 600;
-  line-height: 1.25rem;
+  line-height: 1.5rem;
 }
 
 .app-workspace .app-customer-table td {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5rem;
 }
 
 .app-workspace .app-customer-table th:nth-child(1),
@@ -1044,9 +1075,9 @@ body.app-workspace {
 }
 
 .app-workspace .app-customer-card__name {
-  font-size: 0.875rem;
-  font-weight: 650;
-  line-height: 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5rem;
 }
 
 .app-workspace .app-customer-card__identity-copy {
@@ -1061,9 +1092,9 @@ body.app-workspace {
 .app-workspace .app-customer-card__amount {
   display: block;
   color: var(--color-text-soft);
-  font-size: 0.875rem;
-  font-weight: 650;
-  line-height: 1.25rem;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5rem;
 }
 
 .app-workspace .app-customer-card__payer-segment {
@@ -1085,6 +1116,10 @@ body.app-workspace {
   justify-content: center;
   border: 1px solid transparent;
   border-radius: 999px;
+  background-blend-mode: screen, normal;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.025);
   font-size: 0.875rem;
   font-weight: 650;
   line-height: 1.25rem;
@@ -1093,28 +1128,43 @@ body.app-workspace {
 }
 
 .app-workspace .app-invoice-status--overdue {
-  border-color: #f0b9bd;
-  background: #fff0f1;
-  color: #9b3039;
+  border-color: #d34f55;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #f8bfbd 0%, #f1a6a6 52%, #e99296 100%);
+  color: #912b31;
 }
 
 .app-workspace .app-invoice-status--outstanding {
-  border-color: #c7d5ff;
-  background: #eef3ff;
-  color: #2447c6;
+  border-color: #dda05f;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #ffdfb9 0%, #ffd09c 52%, #f5bd80 100%);
+  color: #925122;
 }
 
 .app-workspace .app-invoice-status--paid {
-  border-color: #b7e2c3;
-  background: #ecf9ef;
-  color: #23693b;
+  border-color: #8bc997;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #d0edd6 0%, #bee6c7 52%, #adddb9 100%);
+  color: #2f7040;
 }
 
-.app-workspace .app-invoice-status--open,
+.app-workspace .app-invoice-status--open {
+  border-color: #687b91;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #c8d5de 0%, #b7c6d1 52%, #a7b8c6 100%);
+  color: #273447;
+}
+
 .app-workspace .app-invoice-status--uncollectible {
-  border-color: #d0d5dd;
-  background: #f2f4f7;
-  color: #475467;
+  border-color: #d3ad2c;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #ffe77a 0%, #f5d64e 52%, #ebc832 100%);
+  color: #785e16;
 }
 
 .app-workspace .app-customer-inbox .app-table-note {
@@ -1155,6 +1205,13 @@ body.app-workspace {
   .app-workspace .app-customer-inbox .app-customer-table td:nth-child(3) {
     padding-right: 0.75rem;
     padding-left: 0.75rem;
+  }
+}
+
+@media (min-width: 48rem) {
+  .app-workspace .app-page-title {
+    font-size: 1.875rem;
+    line-height: 2.25rem;
   }
 }
 

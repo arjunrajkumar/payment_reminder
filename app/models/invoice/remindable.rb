@@ -25,4 +25,19 @@ module Invoice::Remindable
   def next_invoice_reminder_date
     next_reminder_stage&.date_for(due_on:)
   end
+
+  def set_next_invoice_reminder(scheduled_at:)
+    with_lock do
+      stage = next_reminder_stage
+      return unless stage
+
+      invoice_reminders.create!(
+        account:,
+        category: stage.category,
+        day_offset: stage.day_offset,
+        stage_key: stage.key,
+        scheduled_at:
+      )
+    end
+  end
 end

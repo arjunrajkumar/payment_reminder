@@ -134,6 +134,60 @@ class Invoice::RemindableTest < ActiveSupport::TestCase
     end
   end
 
+  test "sets the next invoice reminder" do
+    scheduled_at = Time.zone.local(2026, 10, 25, 9, 30)
+
+    travel_to Time.zone.local(2026, 10, 20, 12) do
+      assert_difference "@invoice.invoice_reminders.count", 1 do
+        reminder = @invoice.set_next_invoice_reminder(scheduled_at:)
+
+        assert_equal @invoice.account, reminder.account
+        assert_equal @invoice, reminder.invoice
+        assert_predicate reminder, :category_pre_due?
+        assert_equal 7, reminder.day_offset
+        assert_equal "pre_due_7", reminder.stage_key
+        assert_predicate reminder, :status_pending?
+        assert_equal scheduled_at, reminder.scheduled_at
+      end
+    end
+  end
+
+  test "sets the stage after a sent invoice reminder" do
+    create_reminder(stage_key: "pre_due_7", status: :sent)
+    scheduled_at = Time.zone.local(2026, 10, 31, 9, 30)
+
+    reminder = @invoice.set_next_invoice_reminder(scheduled_at:)
+
+    assert_equal "pre_due_1", reminder.stage_key
+    assert_equal scheduled_at, reminder.scheduled_at
+  end
+
+  test "does not set another reminder while the new reminder is pending" do
+    scheduled_at = Time.zone.local(2026, 10, 25, 9, 30)
+
+    travel_to Time.zone.local(2026, 10, 20, 12) do
+      first_reminder = @invoice.set_next_invoice_reminder(scheduled_at:)
+
+      assert_no_difference "@invoice.invoice_reminders.count" do
+        assert_nil @invoice.set_next_invoice_reminder(scheduled_at: scheduled_at + 1.hour)
+      end
+
+      assert_predicate first_reminder, :status_pending?
+    end
+  end
+
+  test "does not set an invoice reminder when no next stage exists" do
+    @invoice.customer.update!(customer_segment: customer_segments(:good_debtor_segment))
+
+    travel_to Time.zone.local(2026, 11, 20, 12) do
+      assert_no_difference "@invoice.invoice_reminders.count" do
+        assert_nil @invoice.set_next_invoice_reminder(
+          scheduled_at: Time.zone.local(2026, 11, 20, 9, 30)
+        )
+      end
+    end
+  end
+
   private
     def create_reminder(stage_key:, status:)
       category, day_offset = stage_key.rpartition("_").values_at(0, 2)

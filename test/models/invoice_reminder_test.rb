@@ -68,6 +68,19 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_includes reminder.errors[:account], "must match invoice account"
   end
 
+  test "requires a new reminder to be scheduled after the current invoice reminder" do
+    build_reminder(scheduled_at: Time.zone.local(2026, 10, 25, 9, 30)).save!
+    reminder = build_reminder(
+      category: :overdue,
+      stage_key: "overdue_3",
+      day_offset: 3,
+      scheduled_at: Time.zone.local(2026, 10, 24, 9, 30)
+    )
+
+    assert_not reminder.valid?
+    assert_includes reminder.errors[:scheduled_at], "must be after the current invoice reminder"
+  end
+
   test "enforces stage uniqueness in the database" do
     build_reminder.save!
 

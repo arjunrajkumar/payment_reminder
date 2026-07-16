@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_020000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_16_120000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -56,6 +56,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_020000) do
     t.string "email_address", null: false
     t.datetime "updated_at", null: false
     t.index ["email_address"], name: "index_identities_on_email_address", unique: true
+  end
+
+  create_table "invoice_reminders", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "category", null: false
+    t.datetime "created_at", null: false
+    t.integer "day_offset", null: false
+    t.text "failure_reason"
+    t.bigint "invoice_id", null: false
+    t.datetime "scheduled_at", null: false
+    t.datetime "sent_at"
+    t.string "stage_key", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_invoice_reminders_on_account_id"
+    t.index ["invoice_id", "stage_key"], name: "index_invoice_reminders_on_invoice_id_and_stage_key", unique: true
+    t.index ["invoice_id"], name: "index_invoice_reminders_on_invoice_id"
   end
 
   create_table "invoice_source_webhook_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -173,6 +190,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_020000) do
   add_foreign_key "customers", "accounts"
   add_foreign_key "customers", "customer_segments"
   add_foreign_key "customers", "invoice_sources"
+  add_foreign_key "invoice_reminders", "accounts"
+  add_foreign_key "invoice_reminders", "invoices"
   add_foreign_key "invoice_source_webhook_events", "invoice_sources"
   add_foreign_key "invoice_sources", "accounts"
   add_foreign_key "invoices", "accounts"

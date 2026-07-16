@@ -12,6 +12,7 @@ class Invoice < ApplicationRecord
   belongs_to :account, inverse_of: :invoices
   belongs_to :invoice_source, inverse_of: :invoices
   belongs_to :customer, inverse_of: :invoices
+  has_many :invoice_reminders, dependent: :destroy, inverse_of: :invoice
   attribute :provider_data, default: -> { {} }
   attribute :raw_data, default: -> { {} }
 

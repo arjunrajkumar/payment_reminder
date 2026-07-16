@@ -2,6 +2,7 @@ class Account < ApplicationRecord
   has_many :invoice_sources, dependent: :destroy
   has_many :customers, dependent: :destroy
   has_many :invoices, dependent: :destroy
+  has_many :invoice_reminders, dependent: :destroy, inverse_of: :account
   has_many :users, dependent: :destroy
   has_many :customer_segments, dependent: :destroy, inverse_of: :account
 

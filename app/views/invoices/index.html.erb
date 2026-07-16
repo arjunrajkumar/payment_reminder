@@ -23,7 +23,7 @@
     <p>Bring your Xero or Stripe invoices into PaymentReminder.</p>
     <%= link_to "Connect invoice source", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
   </section>
-<% elsif !@invoices.any? %>
+<% elsif !@has_invoices %>
   <section class="app-empty-state" data-testid="no-synced-invoices">
     <div class="app-empty-state__icon" aria-hidden="true">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">

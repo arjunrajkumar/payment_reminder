@@ -154,7 +154,7 @@ class InvoiceSourceTest < ActiveSupport::TestCase
 
     InvoiceSources::Xero.expects(:new).with(source).returns(adapter)
     adapter.expects(:sync_invoice!).with(external_id: "invoice-123")
-    Customer.any_instance.expects(:refresh_payer_segment!).never
+    Customer.any_instance.expects(:refresh_payer_segment!).once
     source.sync_invoice!(external_id: "invoice-123")
   end
 

@@ -28,6 +28,19 @@ class InvoicesPaginationControllerTest < ActionDispatch::IntegrationTest
     assert_select "turbo-stream[action='remove'][target='invoices-next-page']"
   end
 
+  test "an out-of-range page does not show the account-wide empty state" do
+    account = sign_up_and_complete
+    source = create_invoice_source(account)
+    create_invoice(source, number: "01")
+
+    get invoices_url(page: 99)
+
+    assert_response :success
+    assert_select "[data-testid='no-synced-invoices']", count: 0
+    assert_select "#invoice-index", count: 1
+    assert_empty rendered_invoice_numbers
+  end
+
   private
     def rendered_invoice_numbers
       css_select("#invoice-index tbody td[data-label='Invoice due'] .app-invoice-card__number").map { |number| number.text.squish }

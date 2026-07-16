@@ -13,6 +13,12 @@ class InvoicesHelperTest < ActionView::TestCase
     assert_equal "EUR 125.50", invoice_amount_payable(Invoice.new(currency: "eur", amount_due: 125.50))
   end
 
+  test "does not invent an amount or currency when financial data is missing" do
+    assert_equal "Amount unavailable", invoice_amount_payable(Invoice.new(currency: nil, amount_due: nil))
+    assert_equal "Amount unavailable", invoice_amount_payable(Invoice.new(currency: "USD", amount_due: nil))
+    assert_equal "Amount unavailable", invoice_amount_payable(Invoice.new(currency: nil, amount_due: 125))
+  end
+
   test "describes when an outstanding invoice is due" do
     as_of = Date.new(2026, 7, 15)
 
@@ -20,7 +26,8 @@ class InvoicesHelperTest < ActionView::TestCase
     assert_equal "1 day overdue", invoice_due_timing(Invoice.new(status: "open", amount_due: 100, due_on: as_of - 1.day), as_of: as_of)
     assert_equal "due today", invoice_due_timing(Invoice.new(status: "open", amount_due: 100, due_on: as_of), as_of: as_of)
     assert_equal "due in 1 day", invoice_due_timing(Invoice.new(status: "open", amount_due: 100, due_on: as_of + 1.day), as_of: as_of)
-    assert_equal "due in 7 days", invoice_due_timing(Invoice.new(status: "pending", amount_due: 100, due_on: as_of + 7.days), as_of: as_of)
+    assert_nil invoice_due_timing(Invoice.new(status: "pending", amount_due: 100, due_on: as_of + 7.days), as_of: as_of)
+    assert_nil invoice_due_timing(Invoice.new(status: "pending", amount_due: 100, due_on: as_of - 4.days), as_of: as_of)
     assert_nil invoice_due_timing(Invoice.new(status: "paid", amount_due: 0, due_on: as_of - 4.days), as_of: as_of)
     assert_nil invoice_due_timing(Invoice.new(status: "open", amount_due: 100, due_on: nil), as_of: as_of)
   end

@@ -19,6 +19,9 @@ class Invoice < ApplicationRecord
 
   validates :external_id, presence: true
   validates :external_id, uniqueness: { scope: :invoice_source_id }
+  validate :account_matches_invoice_source
+  validate :account_matches_customer
+  validate :invoice_source_matches_customer
 
   scope :recent, -> { order(issued_on: :desc, due_on: :desc, created_at: :desc) }
   scope :issued, -> { where(status: ISSUED_STATUSES) }
@@ -78,4 +81,23 @@ class Invoice < ApplicationRecord
 
     status
   end
+
+  private
+    def account_matches_invoice_source
+      return if account.blank? || invoice_source.blank? || account == invoice_source.account
+
+      errors.add(:account, "must match invoice source account")
+    end
+
+    def account_matches_customer
+      return if account.blank? || customer.blank? || account == customer.account
+
+      errors.add(:account, "must match customer account")
+    end
+
+    def invoice_source_matches_customer
+      return if invoice_source.blank? || customer.blank? || invoice_source == customer.invoice_source
+
+      errors.add(:invoice_source, "must match customer invoice source")
+    end
 end

@@ -15,8 +15,10 @@ module InvoicesHelper
   end
 
   def invoice_amount_payable(invoice)
+    return "Amount unavailable" if invoice.amount_due.nil? || invoice.currency.blank?
+
     amount = invoice.amount_due.to_d
-    currency = invoice.currency.presence&.upcase || "USD"
+    currency = invoice.currency.upcase
     precision = amount.frac.zero? ? 0 : 2
 
     number_to_currency(amount, unit: "#{currency} ", format: "%u%n", precision: precision)
@@ -25,7 +27,7 @@ module InvoicesHelper
   def invoice_due_timing(invoice, as_of: Date.current)
     return unless invoice.due_on
     return unless invoice.amount_due.to_d.positive?
-    return unless invoice.status_open? || invoice.status_pending?
+    return unless invoice.status_open?
 
     days_until_due = (invoice.due_on - as_of).to_i
 

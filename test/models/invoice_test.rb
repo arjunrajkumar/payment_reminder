@@ -30,6 +30,56 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_includes invoice.errors[:external_id], "has already been taken"
   end
 
+  test "requires its account to match its invoice source account" do
+    other_account = Account.create!(name: "Other Invoice Account")
+    invoice = invoices(:xero_invoice).dup
+    invoice.external_id = "mismatched-account-source"
+    invoice.account = other_account
+
+    assert_not invoice.valid?
+    assert_includes invoice.errors[:account], "must match invoice source account"
+  end
+
+  test "requires its account to match its customer account" do
+    other_account = Account.create!(name: "Other Customer Account")
+    other_source = other_account.invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "other-customer-source"
+    )
+    other_customer = other_source.customers.create!(
+      account: other_account,
+      external_id: "other-customer",
+      name: "Other Customer"
+    )
+    invoice = invoices(:xero_invoice).dup
+    invoice.external_id = "mismatched-account-customer"
+    invoice.customer = other_customer
+
+    assert_not invoice.valid?
+    assert_includes invoice.errors[:account], "must match customer account"
+  end
+
+  test "requires its invoice source to match its customer invoice source" do
+    account = accounts(:paid_jar)
+    other_source = account.invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "other-invoice-source"
+    )
+    other_customer = other_source.customers.create!(
+      account: account,
+      external_id: "other-source-customer",
+      name: "Other Source Customer"
+    )
+    invoice = invoices(:xero_invoice).dup
+    invoice.external_id = "mismatched-source-customer"
+    invoice.customer = other_customer
+
+    assert_not invoice.valid?
+    assert_includes invoice.errors[:invoice_source], "must match customer invoice source"
+  end
+
   test "classifies canonical invoice statuses" do
     open = Invoice.new(status: "open", amount_due: 100)
     paid = Invoice.new(status: "paid", amount_due: 0, amount_paid: 100)

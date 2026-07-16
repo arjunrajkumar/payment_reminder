@@ -79,8 +79,13 @@ class InvoiceSource < ApplicationRecord
     customers.find_each(&:refresh_payer_segment!)
   end
 
-  def sync_invoice!(...)
-    provider_adapter.sync_invoice!(...)
+  def sync_invoice!(external_id:)
+    previous_customer = invoices.find_by(external_id: external_id)&.customer
+    provider_adapter.sync_invoice!(external_id: external_id)
+    invoice = invoices.find_by(external_id: external_id)
+
+    [ previous_customer, invoice&.customer ].compact.uniq.each(&:refresh_payer_segment!)
+    invoice
   end
 
   def connected?

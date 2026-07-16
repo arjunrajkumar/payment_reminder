@@ -12,21 +12,28 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_equal @invoice, reminder.invoice
   end
 
-  test "records a pending reminder stage" do
+  test "records a sent reminder receipt by default" do
     reminder = build_reminder
 
     assert reminder.save
     assert_predicate reminder, :category_pre_due?
-    assert_predicate reminder, :status_pending?
+    assert_predicate reminder, :status_sent?
   end
 
-  test "requires a valid category status stage and scheduled time" do
+  test "records a failed reminder receipt" do
+    reminder = build_reminder(status: :failed, failure_reason: "delivery failed")
+
+    assert reminder.save
+    assert_predicate reminder, :status_failed?
+    assert_equal "delivery failed", reminder.failure_reason
+  end
+
+  test "requires a valid category status and stage" do
     reminder = build_reminder(
       category: "other",
       status: "other",
       stage_key: nil,
-      day_offset: 0,
-      scheduled_at: nil
+      day_offset: 0
     )
 
     assert_not reminder.valid?
@@ -34,7 +41,6 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_includes reminder.errors[:status], "is not included in the list"
     assert_includes reminder.errors[:stage_key], "can't be blank"
     assert_includes reminder.errors[:day_offset], "must be greater than 0"
-    assert_includes reminder.errors[:scheduled_at], "can't be blank"
   end
 
   test "allows each stage only once per invoice" do
@@ -68,19 +74,6 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_includes reminder.errors[:account], "must match invoice account"
   end
 
-  test "requires a new reminder to be scheduled after the current invoice reminder" do
-    build_reminder(scheduled_at: Time.zone.local(2026, 10, 25, 9, 30)).save!
-    reminder = build_reminder(
-      category: :overdue,
-      stage_key: "overdue_3",
-      day_offset: 3,
-      scheduled_at: Time.zone.local(2026, 10, 24, 9, 30)
-    )
-
-    assert_not reminder.valid?
-    assert_includes reminder.errors[:scheduled_at], "must be after the current invoice reminder"
-  end
-
   test "enforces stage uniqueness in the database" do
     build_reminder.save!
 
@@ -97,8 +90,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
           invoice: @invoice,
           category: :pre_due,
           stage_key: "pre_due_7",
-          day_offset: 7,
-          scheduled_at: Time.current
+          day_offset: 7
         }.merge(attributes)
       )
     end

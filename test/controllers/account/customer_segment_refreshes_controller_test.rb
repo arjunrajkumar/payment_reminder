@@ -9,12 +9,12 @@ class Account::CustomerSegmentRefreshesControllerTest < ActionDispatch::Integrat
 
   test "create refreshes customer segments for the current account" do
     account = sign_up_and_complete
-    Account.any_instance.expects(:refresh_payer_segments!).once
+    Account.any_instance.expects(:refresh_customer_segments!).once
 
     post account_customer_segment_refresh_url(script_name: account.slug)
 
     assert_redirected_to account_settings_url(script_name: account.slug)
-    assert_equal "Customer segments refreshed.", flash[:notice]
+    assert_equal "Debtor ratings refreshed.", flash[:notice]
   end
 
   private

@@ -56,6 +56,21 @@ module InvoiceSources
       assert fake_client.invoices_called
     end
 
+    test "sync_invoices stores when Stripe marked an invoice uncollectible" do
+      source = stripe_source
+      marked_uncollectible_at = Time.zone.local(2026, 7, 20, 10, 30)
+      fake_client = FakeStripeClient.new(
+        status: "uncollectible",
+        marked_uncollectible_at: marked_uncollectible_at.to_i
+      )
+
+      InvoiceSources::Stripe::InvoiceSync.new(source, client: fake_client).sync!
+
+      invoice = source.invoices.find_by!(external_id: "in_456")
+      assert_equal "uncollectible", invoice.status
+      assert_equal marked_uncollectible_at.to_date, invoice.completed_on
+    end
+
     test "sync_invoices reuses the Stripe customer for the same customer id" do
       source = stripe_source
       fake_client = FakeStripeClient.new
@@ -145,12 +160,22 @@ module InvoiceSources
     class FakeStripeClient
       attr_accessor :exchange_code_called, :invoices_called
 
-      def initialize(customer: "cus_123", customer_name: "Example Stripe Customer", customer_email: "billing@example.com", invoice_id: "in_456", created: Time.zone.local(2026, 7, 1).to_i)
+      def initialize(
+        customer: "cus_123",
+        customer_name: "Example Stripe Customer",
+        customer_email: "billing@example.com",
+        invoice_id: "in_456",
+        created: Time.zone.local(2026, 7, 1).to_i,
+        status: "open",
+        marked_uncollectible_at: nil
+      )
         @customer = customer
         @customer_name = customer_name
         @customer_email = customer_email
         @invoice_id = invoice_id
         @created = created
+        @status = status
+        @marked_uncollectible_at = marked_uncollectible_at
       end
 
       def exchange_code(code:)
@@ -177,7 +202,7 @@ module InvoiceSources
               "number" => "STR-456",
               "collection_method" => "send_invoice",
               "billing_reason" => "manual",
-              "status" => "open",
+              "status" => @status,
               "currency" => "usd",
               "amount_due" => 25050,
               "amount_paid" => 12525,
@@ -186,8 +211,9 @@ module InvoiceSources
               "created" => @created,
               "due_date" => Time.zone.local(2026, 7, 31).to_i,
               "status_transitions" => {
-                "paid_at" => Time.zone.local(2026, 7, 15).to_i
-              },
+                "paid_at" => Time.zone.local(2026, 7, 15).to_i,
+                "marked_uncollectible_at" => @marked_uncollectible_at
+              }.compact,
               "customer" => @customer,
               "customer_name" => @customer_name,
               "customer_email" => @customer_email,

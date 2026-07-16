@@ -1,0 +1,13 @@
+good_debtor_segment:
+  account: paid_jar
+  payer_segment: good_debtor
+  on_time_rate: 80
+
+normal_debtor_segment:
+  account: paid_jar
+  payer_segment: normal_debtor
+
+bad_debtor_segment:
+  account: paid_jar
+  payer_segment: bad_debtor
+  on_time_rate: 50

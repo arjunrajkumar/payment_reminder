@@ -130,7 +130,7 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     InvoiceSources::Xero.expects(:new).twice.with(source).returns(adapter)
     adapter.expects(:connect!).with(code: "auth-code")
     adapter.expects(:sync_invoices!).in_sequence(sync_sequence)
-    Customer.any_instance.expects(:refresh_payer_segment!).once.in_sequence(sync_sequence)
+    Customer.any_instance.expects(:refresh_customer_segment!).once.in_sequence(sync_sequence)
 
     source.connect!(code: "auth-code")
     source.sync_invoices!
@@ -142,7 +142,7 @@ class InvoiceSourceTest < ActiveSupport::TestCase
 
     InvoiceSources::Xero.expects(:new).with(source).returns(adapter)
     adapter.expects(:sync_invoices!).raises(InvoiceSources::Xero::OauthClient::Error, "provider unavailable")
-    Customer.any_instance.expects(:refresh_payer_segment!).never
+    Customer.any_instance.expects(:refresh_customer_segment!).never
     assert_raises(InvoiceSources::Xero::OauthClient::Error) do
       source.sync_invoices!
     end
@@ -154,7 +154,7 @@ class InvoiceSourceTest < ActiveSupport::TestCase
 
     InvoiceSources::Xero.expects(:new).with(source).returns(adapter)
     adapter.expects(:sync_invoice!).with(external_id: "invoice-123")
-    Customer.any_instance.expects(:refresh_payer_segment!).once
+    Customer.any_instance.expects(:refresh_customer_segment!).once
     source.sync_invoice!(external_id: "invoice-123")
   end
 

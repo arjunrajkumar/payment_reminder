@@ -74,6 +74,7 @@ module InvoiceSources
               issued_on: parse_date(payload["DateString"] || payload["Date"]),
               due_on: parse_date(payload["DueDateString"] || payload["DueDate"]),
               paid_on: parse_date(payload["FullyPaidOnDate"]),
+              completed_on: completed_on(payload),
               contact_external_id: contact["ContactID"],
               contact_name: contact["Name"],
               provider_data: {
@@ -89,6 +90,10 @@ module InvoiceSources
 
         def sales_invoice?(payload)
           payload["Type"].to_s.casecmp?("ACCREC")
+        end
+
+        def completed_on(payload)
+          parse_date(payload["FullyPaidOnDate"]) if payload["Status"].to_s.casecmp?("PAID")
         end
 
         def parse_date(value)

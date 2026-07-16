@@ -47,65 +47,62 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "show renders customer segment rules" do
+  test "show renders debtor rating rules" do
     account = sign_up_and_complete(email_address: "owner-segment-settings@example.com")
 
     get account_settings_url(script_name: account.slug)
 
     assert_response :success
     assert_select ".app-segment-rules-card" do
-      assert_select ".app-card__title", "Customer segments"
+      assert_select ".app-card__title", "Debtor ratings"
+      assert_select ".app-segment-rules-card__description", text: /12 most recent completed payment outcomes/
+      assert_select ".app-segment-rules-card__description", text: /Draft, open, and overdue invoices are excluded until resolved/
+      assert_select ".app-segment-rules-card__description", text: /fewer than 3 completed outcomes are always Normal Debtors/
       assert_select "th", "Segment"
       assert_select "th", "Current rule"
       assert_select "th", "Adjust rule"
-      assert_select "tbody tr", count: 5
+      assert_select "tbody tr", count: 3
+      assert_select "select", count: 2
       assert_select "form[action=?]", account_settings_path(script_name: account.slug)
       assert_select "form[action=?]", account_customer_segment_refresh_path(script_name: account.slug) do
-        assert_select "button", "Refresh segments"
+        assert_select "button", "Refresh ratings"
       end
     end
   end
 
-  test "update saves customer segment rules for the current account" do
+  test "update saves debtor rating rules for the current account" do
     account = sign_up_and_complete(email_address: "owner-segment-update@example.com")
     other_account = Account.create!(name: "Other Segment Account")
 
     patch account_settings_url(script_name: account.slug), params: {
-      account: {
-        payer_segment_minimum_payment_history: 4,
-        payer_segment_minimum_unreliable_history: 6,
-        payer_segment_pays_on_time_rate: 85,
-        payer_segment_unreliable_on_time_rate: 45,
-        payer_segment_slow_payer_days: 10
-      }
+      account: { customer_segments_attributes: debtor_rating_attributes(account) }
     }
 
     assert_redirected_to account_settings_url(script_name: account.slug)
-    assert_equal "Customer segment rules saved. Refresh segments to apply them.", flash[:notice]
-    assert_equal 4, account.reload.payer_segment_minimum_payment_history
-    assert_equal 6, account.payer_segment_minimum_unreliable_history
-    assert_equal 85, account.payer_segment_pays_on_time_rate
-    assert_equal 45, account.payer_segment_unreliable_on_time_rate
-    assert_equal 10, account.payer_segment_slow_payer_days
-    assert_equal 3, other_account.reload.payer_segment_minimum_payment_history
+    assert_equal "Debtor rating rules saved. Refresh ratings to apply them.", flash[:notice]
+    assert_equal 85, account.customer_segment(:good_debtor).reload.on_time_rate
+    assert_equal 45, account.customer_segment(:bad_debtor).reload.on_time_rate
+    assert_equal 80, other_account.customer_segment(:good_debtor).on_time_rate
+    assert_equal 50, other_account.customer_segment(:bad_debtor).on_time_rate
   end
 
-  test "update renders invalid customer segment rules" do
+  test "update renders invalid debtor rating rules" do
     account = sign_up_and_complete(email_address: "owner-segment-invalid@example.com")
 
     patch account_settings_url(script_name: account.slug), params: {
       account: {
-        payer_segment_minimum_payment_history: 6,
-        payer_segment_minimum_unreliable_history: 5,
-        payer_segment_pays_on_time_rate: 80,
-        payer_segment_unreliable_on_time_rate: 50,
-        payer_segment_slow_payer_days: 7
+        customer_segments_attributes: debtor_rating_attributes(
+          account,
+          good_debtor_rate: 50,
+          bad_debtor_rate: 50
+        )
       }
     }
 
     assert_response :unprocessable_entity
-    assert_select "#flash", text: /Minimum unreliable history/
-    assert_equal 3, account.reload.payer_segment_minimum_payment_history
+    assert_select "#flash", text: /Good Debtor on-time rate must stay above the Bad Debtor on-time rate/
+    assert_equal 80, account.customer_segment(:good_debtor).reload.on_time_rate
+    assert_equal 50, account.customer_segment(:bad_debtor).reload.on_time_rate
   end
 
   test "sign out clears session" do
@@ -121,6 +118,23 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def debtor_rating_attributes(
+      account,
+      good_debtor_rate: 85,
+      bad_debtor_rate: 45
+    )
+      {
+        good_debtor: {
+          id: account.customer_segment(:good_debtor).id,
+          on_time_rate: good_debtor_rate
+        },
+        bad_debtor: {
+          id: account.customer_segment(:bad_debtor).id,
+          on_time_rate: bad_debtor_rate
+        }
+      }
+    end
+
     def sign_up_and_complete(email_address: "owner-settings@example.com", full_name: "Owner Person")
       post signup_url, params: { signup: { email_address: email_address } }
       post session_magic_link_url, params: { code: MagicLink.last.code }

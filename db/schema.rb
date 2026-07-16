@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_15_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_16_020000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -20,28 +20,34 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_120000) do
     t.datetime "created_at", null: false
     t.bigint "external_account_id"
     t.string "name", null: false
-    t.integer "payer_segment_minimum_payment_history", default: 3, null: false
-    t.integer "payer_segment_minimum_unreliable_history", default: 5, null: false
-    t.integer "payer_segment_pays_on_time_rate", default: 80, null: false
-    t.integer "payer_segment_slow_payer_days", default: 7, null: false
-    t.integer "payer_segment_unreliable_on_time_rate", default: 50, null: false
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
     t.index ["name"], name: "index_accounts_on_name"
   end
 
+  create_table "customer_segments", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.datetime "created_at", null: false
+    t.integer "on_time_rate"
+    t.string "payer_segment", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "payer_segment"], name: "index_customer_segments_on_account_id_and_payer_segment", unique: true
+    t.index ["account_id"], name: "index_customer_segments_on_account_id"
+  end
+
   create_table "customers", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.datetime "created_at", null: false
+    t.bigint "customer_segment_id", null: false
     t.datetime "details_observed_at"
     t.string "email"
     t.string "external_id", null: false
     t.bigint "invoice_source_id", null: false
     t.string "name", null: false
-    t.string "payer_segment", default: "new", null: false
     t.datetime "updated_at", null: false
+    t.index ["account_id", "customer_segment_id"], name: "index_customers_on_account_id_and_customer_segment_id"
     t.index ["account_id", "name"], name: "index_customers_on_account_id_and_name"
-    t.index ["account_id", "payer_segment"], name: "index_customers_on_account_id_and_payer_segment"
+    t.index ["customer_segment_id"], name: "index_customers_on_customer_segment_id"
     t.index ["invoice_source_id", "external_id"], name: "index_customers_on_invoice_source_id_and_external_id", unique: true
   end
 
@@ -97,6 +103,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_120000) do
     t.bigint "account_id", null: false
     t.decimal "amount_due", precision: 12, scale: 2
     t.decimal "amount_paid", precision: 12, scale: 2
+    t.date "completed_on"
     t.string "contact_external_id"
     t.string "contact_name"
     t.datetime "created_at", null: false
@@ -118,6 +125,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_120000) do
     t.datetime "updated_at", null: false
     t.index ["account_id", "status"], name: "index_invoices_on_account_id_and_status"
     t.index ["account_id"], name: "index_invoices_on_account_id"
+    t.index ["customer_id", "completed_on"], name: "index_invoices_on_customer_id_and_completed_on"
     t.index ["customer_id"], name: "index_invoices_on_customer_id"
     t.index ["due_on"], name: "index_invoices_on_due_on"
     t.index ["invoice_source_id", "external_id"], name: "index_invoices_on_invoice_source_id_and_external_id", unique: true
@@ -161,7 +169,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_15_120000) do
     t.index ["identity_id"], name: "index_users_on_identity_id"
   end
 
+  add_foreign_key "customer_segments", "accounts"
   add_foreign_key "customers", "accounts"
+  add_foreign_key "customers", "customer_segments"
   add_foreign_key "customers", "invoice_sources"
   add_foreign_key "invoice_source_webhook_events", "invoice_sources"
   add_foreign_key "invoice_sources", "accounts"

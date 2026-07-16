@@ -12,7 +12,7 @@ class CoreFlowsTest < ApplicationSystemTestCase
     within "[data-testid='invoice-row']", text: "INV-SYSTEM-OVERDUE" do
       assert_selector "td[data-label='Invoice due'] .app-invoice-card__number", text: "INV-SYSTEM-OVERDUE"
       assert_text "Harbor & Co"
-      assert_text "Slow payer"
+      assert_text "Bad debtor"
       assert_text "USD 50,000"
       assert_text "INV-SYSTEM-OVERDUE 40 days overdue"
       assert_selector ".app-invoice-status", text: "Overdue"
@@ -81,7 +81,7 @@ class CoreFlowsTest < ApplicationSystemTestCase
         account: account,
         external_id: "system-flow-contact",
         name: "Harbor & Co",
-        payer_segment: :slow_payer
+        customer_segment: account.customer_segment(:bad_debtor)
       )
 
       source.invoices.create!(

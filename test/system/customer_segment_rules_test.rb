@@ -1,28 +1,16 @@
 require "application_system_test_case"
 
 class CustomerSegmentRulesTest < ApplicationSystemTestCase
-  test "history rules disable contradictory choices without changing values" do
-    sign_up_and_complete(email_address: "segment-history-system@example.com")
-
-    assert_enabled_options "account_payer_segment_minimum_payment_history", 1..5
-    assert_enabled_options "account_payer_segment_minimum_unreliable_history", 3..12
-
-    select "10 payments", from: "account_payer_segment_minimum_unreliable_history"
-
-    assert_equal "3", find("#account_payer_segment_minimum_payment_history").value
-    assert_enabled_options "account_payer_segment_minimum_payment_history", 1..10
-  end
-
-  test "on-time rules disable contradictory choices without changing values" do
+  test "debtor rating boundaries disable contradictory choices without changing values" do
     sign_up_and_complete(email_address: "segment-timing-system@example.com")
 
-    assert_enabled_options "account_payer_segment_pays_on_time_rate", (55..100).step(5)
-    assert_enabled_options "account_payer_segment_unreliable_on_time_rate", (0..75).step(5)
+    assert_enabled_options "account_customer_segments_attributes_good_debtor_on_time_rate", (55..100).step(5)
+    assert_enabled_options "account_customer_segments_attributes_bad_debtor_on_time_rate", (0..75).step(5)
 
-    select "70%", from: "account_payer_segment_unreliable_on_time_rate"
+    select "70%", from: "account_customer_segments_attributes_bad_debtor_on_time_rate"
 
-    assert_equal "80", find("#account_payer_segment_pays_on_time_rate").value
-    assert_enabled_options "account_payer_segment_pays_on_time_rate", (75..100).step(5)
+    assert_equal "80", find("#account_customer_segments_attributes_good_debtor_on_time_rate").value
+    assert_enabled_options "account_customer_segments_attributes_good_debtor_on_time_rate", (75..100).step(5)
   end
 
   private

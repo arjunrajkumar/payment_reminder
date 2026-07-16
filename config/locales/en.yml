@@ -31,9 +31,6 @@ en:
   hello: "Hello world"
   activerecord:
     attributes:
-      account:
-        payer_segment_minimum_payment_history: "Minimum payment history"
-        payer_segment_minimum_unreliable_history: "Minimum unreliable history"
-        payer_segment_pays_on_time_rate: "Pays-on-time rate"
-        payer_segment_unreliable_on_time_rate: "Unreliable on-time rate"
-        payer_segment_slow_payer_days: "Slow-payer days"
+      customer_segment:
+        on_time_rate: "On-time rate"
+        payer_segment: "Debtor rating"

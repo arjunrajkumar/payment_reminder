@@ -104,6 +104,58 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_not_predicate pending, :issued?
   end
 
+  test "records when a paid invoice became a completed outcome" do
+    paid_on = Date.new(2026, 7, 15)
+    invoice = invoices(:xero_invoice).dup
+    invoice.external_id = "paid-completion-date"
+    invoice.status = "paid"
+    invoice.paid_on = paid_on
+
+    invoice.valid?
+
+    assert_equal paid_on, invoice.completed_on
+  end
+
+  test "preserves a provider completion date for an uncollectible invoice" do
+    completed_on = Date.new(2026, 7, 14)
+    invoice = invoices(:xero_invoice).dup
+    invoice.external_id = "uncollectible-completion-date"
+    invoice.status = "uncollectible"
+    invoice.completed_on = completed_on
+
+    invoice.valid?
+
+    assert_equal completed_on, invoice.completed_on
+  end
+
+  test "keeps the original uncollectible completion date across later syncs" do
+    travel_to Time.zone.local(2026, 7, 14, 10) do
+      invoice = create_invoice(
+        invoice_sources(:xero),
+        "uncollectible",
+        amount_due: 100,
+        due_on: Date.new(2026, 7, 1)
+      )
+      completed_on = invoice.completed_on
+
+      travel 2.days
+      invoice.update!(completed_on: nil)
+
+      assert_equal completed_on, invoice.completed_on
+    end
+  end
+
+  test "clears a completion date when an invoice is no longer terminal" do
+    invoice = invoices(:xero_invoice).dup
+    invoice.external_id = "reopened-completion-date"
+    invoice.status = "open"
+    invoice.completed_on = Date.new(2026, 7, 14)
+
+    invoice.valid?
+
+    assert_nil invoice.completed_on
+  end
+
   test "keeps partial payments open while a balance remains" do
     invoice = Invoice.new(status: "open", amount_due: 40, amount_paid: 60)
 

@@ -17,6 +17,8 @@ class Invoice < ApplicationRecord
 
   enum :status, STATUSES, prefix: true, validate: true
 
+  before_validation :set_completed_on
+
   validates :external_id, presence: true
   validates :external_id, uniqueness: { scope: :invoice_source_id }
   validate :account_matches_invoice_source
@@ -83,6 +85,17 @@ class Invoice < ApplicationRecord
   end
 
   private
+    def set_completed_on
+      if status_paid?
+        self.completed_on = paid_on
+      elsif status_uncollectible?
+        self.completed_on ||= completed_on_in_database if status_in_database == "uncollectible"
+        self.completed_on ||= Date.current
+      else
+        self.completed_on = nil
+      end
+    end
+
     def account_matches_invoice_source
       return if account.blank? || invoice_source.blank? || account == invoice_source.account
 

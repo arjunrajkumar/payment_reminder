@@ -15,9 +15,10 @@ The active invoice index should show only persisted invoice facts:
 - canonical invoice status.
 
 Payer segments remain persisted on customers after a full invoice sync and are
-calculated from the latest 12 paid or uncollectible outcomes. Paid outcomes
-require both due and payment dates; any uncollectible outcome in the window is
-unreliable.
+calculated from up to the latest 12 completed outcomes. Paid outcomes require
+both due and final payment dates, and uncollectible outcomes count as not paid
+on time. Open and overdue invoices are excluded until resolved. Customers with
+fewer than three completed outcomes are Normal Debtors.
 
 Do not add reminder, reply, schedule, dispute, or conversation claims until the
 corresponding records and workflow exist.

@@ -76,7 +76,7 @@ class InvoiceSource < ApplicationRecord
 
   def sync_invoices!
     provider_adapter.sync_invoices!
-    customers.find_each(&:refresh_payer_segment!)
+    customers.find_each(&:refresh_customer_segment!)
   end
 
   def sync_invoice!(external_id:)
@@ -84,7 +84,7 @@ class InvoiceSource < ApplicationRecord
     provider_adapter.sync_invoice!(external_id: external_id)
     invoice = invoices.find_by(external_id: external_id)
 
-    [ previous_customer, invoice&.customer ].compact.uniq.each(&:refresh_payer_segment!)
+    [ previous_customer, invoice&.customer ].compact.uniq.each(&:refresh_customer_segment!)
     invoice
   end
 

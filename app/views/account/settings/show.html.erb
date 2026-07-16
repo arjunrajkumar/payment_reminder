@@ -59,11 +59,19 @@
 <section class="app-table-card app-segment-rules-card">
   <div class="app-segment-rules-card__header">
     <div>
-      <h2 class="app-card__title">Customer segments</h2>
-      <p class="app-segment-rules-card__description">Choose how Payment Reminder labels customers from their recent payment history.</p>
+      <h2 class="app-card__title">Debtor ratings</h2>
+      <p class="app-segment-rules-card__description">
+        Ratings use up to the <%= CustomerSegment::PAYMENT_HISTORY_LIMIT %> most recent completed payment outcomes.
+        Paid invoices count as on time when fully paid by the due date; uncollectible invoices count as not on time.
+        Draft, open, and overdue invoices are excluded until resolved.
+      </p>
+      <p class="app-segment-rules-card__description">
+        Customers with fewer than <%= CustomerSegment::MINIMUM_COMPLETED_OUTCOMES %> completed outcomes are always Normal Debtors.
+        The outcome window and minimum history are fixed.
+      </p>
     </div>
 
-    <%= button_to "Refresh segments",
+    <%= button_to "Refresh ratings",
       account_customer_segment_refresh_path(script_name: @account.slug),
       class: "app-secondary-button" %>
   </div>
@@ -83,95 +91,64 @@
           </tr>
         </thead>
         <tbody>
+          <% good_debtor_segment = @customer_segments.fetch("good_debtor") %>
           <tr>
-            <td><strong>New</strong></td>
-            <td>Fewer than <%= pluralize(@account.payer_segment_minimum_payment_history, "eligible payment") %>.</td>
+            <td><strong>Good Debtor</strong></td>
             <td>
-              <div class="app-segment-rule-control">
-                <%= form.label :payer_segment_minimum_payment_history, "Minimum history" %>
-                <%= form.select :payer_segment_minimum_payment_history,
-                  Account::PayerSegment::HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
-                  {},
-                  class: "app-select",
-                  data: {
-                    segment_rules_target: "minimumHistory",
-                    action: "segment-rules#updateOptionAvailability"
-                  } %>
-                <small class="app-segment-rule-hint">Cannot exceed the unreliable payer minimum history</small>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td><strong>Pays on time</strong></td>
-            <td>At least <%= @account.payer_segment_pays_on_time_rate %>% paid by the due date.</td>
-            <td>
-              <div class="app-segment-rule-control">
-                <%= form.label :payer_segment_pays_on_time_rate, "On-time rate" %>
-                <%= form.select :payer_segment_pays_on_time_rate,
-                  Account::PayerSegment::PAYS_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}% or more", rate ] },
-                  {},
-                  class: "app-select",
-                  data: {
-                    segment_rules_target: "paysOnTimeRate",
-                    action: "segment-rules#updateOptionAvailability"
-                  } %>
-                <small class="app-segment-rule-hint">Must stay above the unreliable payer on-time rate.</small>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td><strong>Slow payer</strong></td>
-            <td>Typical payment is more than <%= pluralize(@account.payer_segment_slow_payer_days, "day") %> late.</td>
-            <td>
-              <div class="app-segment-rule-control">
-                <%= form.label :payer_segment_slow_payer_days, "Typical delay" %>
-                <%= form.select :payer_segment_slow_payer_days,
-                  Account::PayerSegment::SLOW_PAYER_DAYS_OPTIONS.map { |days| [ pluralize(days, "day"), days ] },
-                  {},
-                  class: "app-select" %>
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td><strong>Unreliable payer</strong></td>
-            <td>
-              Any recent uncollectible invoice, or at least <%= pluralize(@account.payer_segment_minimum_unreliable_history, "eligible payment") %>
-              with under <%= @account.payer_segment_unreliable_on_time_rate %>% paid on time, a typical delay over
-              <%= pluralize(@account.payer_segment_slow_payer_days, "day") %>, and inconsistent timing.
+              At least <%= pluralize(CustomerSegment::MINIMUM_COMPLETED_OUTCOMES, "completed outcome") %>
+              and <%= good_debtor_segment.on_time_rate %>% or more paid on time.
             </td>
             <td>
-              <div class="app-segment-rule-controls">
+              <%= form.fields_for :customer_segments, good_debtor_segment, child_index: "good_debtor" do |segment_form| %>
                 <div class="app-segment-rule-control">
-                  <%= form.label :payer_segment_minimum_unreliable_history, "Minimum history" %>
-                  <%= form.select :payer_segment_minimum_unreliable_history,
-                    Account::PayerSegment::HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
+                  <%= segment_form.label :on_time_rate, "On-time rate at least" %>
+                  <%= segment_form.select :on_time_rate,
+                    CustomerSegment::ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
                     {},
                     class: "app-select",
                     data: {
-                      segment_rules_target: "unreliableHistory",
+                      segment_rules_target: "goodDebtorRate",
                       action: "segment-rules#updateOptionAvailability"
                     } %>
-                  <small class="app-segment-rule-hint">Must be at least the New minimum history</small>
+                  <small class="app-segment-rule-hint">Must stay above the Bad Debtor on-time rate.</small>
                 </div>
+              <% end %>
+            </td>
+          </tr>
+
+          <tr>
+            <td><strong>Normal Debtor</strong></td>
+            <td>
+              Fewer than <%= pluralize(CustomerSegment::MINIMUM_COMPLETED_OUTCOMES, "completed outcome") %>,
+              or at least <%= @customer_segments.fetch("bad_debtor").on_time_rate %>% but under
+              <%= good_debtor_segment.on_time_rate %>% paid on time.
+            </td>
+            <td><span class="app-segment-rule-automatic">Automatic range</span></td>
+          </tr>
+
+          <% bad_debtor_segment = @customer_segments.fetch("bad_debtor") %>
+          <tr>
+            <td><strong>Bad Debtor</strong></td>
+            <td>
+              At least <%= pluralize(CustomerSegment::MINIMUM_COMPLETED_OUTCOMES, "completed outcome") %>
+              and under <%= bad_debtor_segment.on_time_rate %>% paid on time.
+            </td>
+            <td>
+              <%= form.fields_for :customer_segments, bad_debtor_segment, child_index: "bad_debtor" do |segment_form| %>
                 <div class="app-segment-rule-control">
-                  <%= form.label :payer_segment_unreliable_on_time_rate, "On-time rate below" %>
-                  <%= form.select :payer_segment_unreliable_on_time_rate,
-                    Account::PayerSegment::UNRELIABLE_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
+                  <%= segment_form.label :on_time_rate, "On-time rate below" %>
+                  <%= segment_form.select :on_time_rate,
+                    CustomerSegment::ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
                     {},
                     class: "app-select",
                     data: {
-                      segment_rules_target: "unreliableOnTimeRate",
+                      segment_rules_target: "badDebtorRate",
                       action: "segment-rules#updateOptionAvailability"
                     } %>
-                  <small class="app-segment-rule-hint">Must stay below the pays-on-time rate.</small>
+                  <small class="app-segment-rule-hint">Must stay below the Good Debtor on-time rate.</small>
                 </div>
-              </div>
+              <% end %>
             </td>
-          </tr>
-          <tr>
-            <td><strong>Sometimes late</strong></td>
-            <td>Payment timing does not match another segment.</td>
-            <td><span class="app-segment-rule-automatic">Automatic fallback</span></td>
           </tr>
         </tbody>
       </table>

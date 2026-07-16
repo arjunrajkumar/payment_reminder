@@ -1,6 +1,7 @@
 xero_customer:
   account: paid_jar
   invoice_source: xero
+  customer_segment: normal_debtor_segment
   external_id: contact-123
   name: Example Customer
   email: customer@example.com

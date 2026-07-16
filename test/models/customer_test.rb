@@ -11,9 +11,39 @@ class CustomerTest < ActiveSupport::TestCase
     )
   end
 
-  test "belongs to an account and invoice source" do
+  test "belongs to an account invoice source and customer segment" do
     assert_equal @source.account, @customer.account
     assert_equal @source, @customer.invoice_source
+    assert_equal @source.account.customer_segment(:normal_debtor), @customer.customer_segment
+  end
+
+  test "starts in the account normal debtor segment" do
+    assert_equal @source.account.customer_segment(:normal_debtor), @customer.customer_segment
+    assert_equal "normal_debtor", @customer.payer_segment
+  end
+
+  test "provider sync assigns new customers to the account normal debtor segment" do
+    customer = Customer.sync_from_provider!(
+      invoice_source: @source,
+      external_id: SecureRandom.uuid,
+      name: "Provider Customer",
+      email: "provider@example.com"
+    )
+
+    assert_equal @source.account.customer_segment(:normal_debtor), customer.customer_segment
+  end
+
+  test "requires its customer segment to belong to its account" do
+    other_account = Account.create!(name: "Other Customer Segment Account")
+    customer = @source.customers.build(
+      account: @source.account,
+      customer_segment: other_account.customer_segment(:normal_debtor),
+      external_id: SecureRandom.uuid,
+      name: "Mismatched Segment Customer"
+    )
+
+    assert_not customer.valid?
+    assert_includes customer.errors[:customer_segment], "must belong to the customer account"
   end
 
   test "requires provider identity and a name" do

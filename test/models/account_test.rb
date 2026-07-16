@@ -17,6 +17,12 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes accounts(:paid_jar).customers, customers(:xero_customer)
   end
 
+  test "has one rule for every customer payer segment" do
+    account = accounts(:paid_jar)
+
+    assert_equal CustomerSegment::PAYER_SEGMENTS.keys.sort, account.customer_segments.pluck(:payer_segment).sort
+  end
+
   test "creates account with owner and system user" do
     identity = Identity.create!(email_address: "owner@example.com")
     account = Account.create_with_owner(
@@ -31,7 +37,7 @@ class AccountTest < ActiveSupport::TestCase
   test "rolls back account when owner creation fails" do
     identity = Identity.create!(email_address: "invalid-owner@example.com")
 
-    assert_no_difference [ -> { Account.count }, -> { User.count } ] do
+    assert_no_difference [ -> { Account.count }, -> { CustomerSegment.count }, -> { User.count } ] do
       assert_raises ActiveRecord::RecordInvalid do
         Account.create_with_owner(
           account: { name: "Invalid Owner Account" },
@@ -72,45 +78,26 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes account.errors[:name], "can't be blank"
   end
 
-  test "uses the current payer segment rule defaults" do
-    account = Account.new(name: "Segment Defaults")
+  test "creates the current debtor rating rule defaults" do
+    account = Account.create!(name: "Segment Defaults")
 
-    assert_equal 3, account.payer_segment_minimum_payment_history
-    assert_equal 5, account.payer_segment_minimum_unreliable_history
-    assert_equal 80, account.payer_segment_pays_on_time_rate
-    assert_equal 50, account.payer_segment_unreliable_on_time_rate
-    assert_equal 7, account.payer_segment_slow_payer_days
+    assert_equal 3, account.customer_segments.size
+    assert_equal 80, account.customer_segment(:good_debtor).on_time_rate
+    assert_nil account.customer_segment(:normal_debtor).on_time_rate
+    assert_equal 50, account.customer_segment(:bad_debtor).on_time_rate
   end
 
-  test "requires supported payer segment rule values" do
-    invalid_rules = {
-      payer_segment_minimum_payment_history: 0,
-      payer_segment_minimum_unreliable_history: 13,
-      payer_segment_pays_on_time_rate: 81,
-      payer_segment_unreliable_on_time_rate: 76,
-      payer_segment_slow_payer_days: 2
-    }
-
-    invalid_rules.each do |attribute, value|
-      account = Account.new(name: "Invalid Segment Rules", attribute => value)
-
-      assert_not account.valid?, "expected #{attribute}=#{value} to be invalid"
-      assert_predicate account.errors[attribute], :any?
-    end
-  end
-
-  test "keeps unreliable payer thresholds below the broader rules" do
-    account = Account.new(
-      name: "Overlapping Segment Rules",
-      payer_segment_minimum_payment_history: 6,
-      payer_segment_minimum_unreliable_history: 5,
-      payer_segment_pays_on_time_rate: 50,
-      payer_segment_unreliable_on_time_rate: 50
+  test "keeps the good debtor threshold above the bad debtor threshold" do
+    account = Account.create!(name: "Overlapping Segment Rules")
+    account.assign_attributes(
+      customer_segments_attributes: [
+        { id: account.customer_segment(:good_debtor).id, on_time_rate: 50 },
+        { id: account.customer_segment(:bad_debtor).id, on_time_rate: 50 }
+      ]
     )
 
     assert_not account.valid?
-    assert_includes account.errors[:payer_segment_minimum_unreliable_history], "must be at least the minimum payment history"
-    assert_includes account.errors[:payer_segment_unreliable_on_time_rate], "must be lower than the pays-on-time rate"
+    assert_includes account.errors[:base], "Good Debtor on-time rate must stay above the Bad Debtor on-time rate"
   end
 
   test "refreshes every customer payer segment" do
@@ -126,8 +113,8 @@ class AccountTest < ActiveSupport::TestCase
       name: "Segment Refresh Customer"
     )
 
-    Customer.any_instance.expects(:refresh_payer_segment!).once
+    Customer.any_instance.expects(:refresh_customer_segment!).once
 
-    assert_same account, account.refresh_payer_segments!
+    assert_same account, account.refresh_customer_segments!
   end
 end

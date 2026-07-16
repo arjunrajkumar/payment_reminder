@@ -62,6 +62,7 @@ module InvoiceSources
               issued_on: date_from_timestamp(payload["created"]),
               due_on: date_from_timestamp(payload["due_date"]),
               paid_on: date_from_timestamp(payload.dig("status_transitions", "paid_at")),
+              completed_on: completed_on(payload),
               contact_external_id: customer_id(payload),
               contact_name: customer_display_name(payload),
               provider_data: {
@@ -87,6 +88,15 @@ module InvoiceSources
 
         def date_from_timestamp(value)
           time_from_timestamp(value)&.to_date
+        end
+
+        def completed_on(payload)
+          case payload["status"]
+          when "paid"
+            date_from_timestamp(payload.dig("status_transitions", "paid_at"))
+          when "uncollectible"
+            date_from_timestamp(payload.dig("status_transitions", "marked_uncollectible_at"))
+          end
         end
 
         def time_from_timestamp(value)

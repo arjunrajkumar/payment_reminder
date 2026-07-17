@@ -49,4 +49,8 @@ class InvoiceReminder::Policy
   def self.stages_for(payer_segment:)
     SCHEDULES.fetch(payer_segment.to_s.to_sym)
   end
+
+  def self.stage_for(payer_segment:, stage_key:)
+    stages_for(payer_segment:).find { |stage| stage.key == stage_key }
+  end
 end

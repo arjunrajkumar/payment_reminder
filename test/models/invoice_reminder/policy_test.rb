@@ -45,6 +45,24 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
     assert_equal "pre_due_3", stages.first.key
   end
 
+  test "finds a stage by payer segment and stable stage key" do
+    stage = InvoiceReminder::Policy.stage_for(
+      payer_segment: :bad_debtor,
+      stage_key: "pre_due_7"
+    )
+
+    assert_equal :direct, stage.tone
+  end
+
+  test "returns nil when a stage is absent from the payer segment schedule" do
+    stage = InvoiceReminder::Policy.stage_for(
+      payer_segment: :good_debtor,
+      stage_key: "pre_due_7"
+    )
+
+    assert_nil stage
+  end
+
   test "calculates stage dates from an invoice due date" do
     due_on = Date.new(2026, 7, 31)
     stages = InvoiceReminder::Policy.stages_for(payer_segment: :normal_debtor).index_by(&:key)

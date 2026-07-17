@@ -6,6 +6,38 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     @invoice.account.update!(automatic_invoice_reminders_enabled: true)
   end
 
+  test "limits concurrency to one job for each invoice stage" do
+    first_job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
+    same_stage_job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "final")
+    other_invoice_job = InvoiceReminders::SendJob.new(@invoice.id + 1, "pre_due", 7, "friendly")
+    other_stage_job = InvoiceReminders::SendJob.new(@invoice.id, "overdue", 3, "direct")
+
+    assert_predicate first_job, :concurrency_limited?
+    assert_equal "InvoiceReminders::SendJob/#{@invoice.id}:pre_due_7", first_job.concurrency_key
+    assert_equal first_job.concurrency_key, same_stage_job.concurrency_key
+    refute_equal first_job.concurrency_key, other_invoice_job.concurrency_key
+    refute_equal first_job.concurrency_key, other_stage_job.concurrency_key
+    assert_equal 1, InvoiceReminders::SendJob.concurrency_limit
+    assert_equal 1.hour, InvoiceReminders::SendJob.concurrency_duration
+    assert_equal :block, InvoiceReminders::SendJob.concurrency_on_conflict
+  end
+
+  test "a duplicate job released after delivery does not send again" do
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).once.returns(true)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_enqueued_jobs 2, only: InvoiceReminders::SendJob do
+        2.times do
+          InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+        end
+      end
+
+      assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+        perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+      end
+    end
+  end
+
   test "creates a sent receipt after sending the email" do
     sent_at = Time.zone.local(2026, 7, 24, 12)
 

@@ -1,6 +1,13 @@
 class InvoiceReminders::SendJob < ApplicationJob
   queue_as :default
 
+  limits_concurrency(
+    to: 1,
+    key: ->(invoice_id, category, day_offset, *) { "#{invoice_id}:#{category}_#{day_offset}" },
+    duration: 1.hour,
+    on_conflict: :block
+  )
+
   def perform(invoice_id, category, day_offset, _queued_tone)
     stage_key = "#{category}_#{day_offset}"
     invoice = find_invoice(invoice_id:, stage_key:)

@@ -74,6 +74,40 @@
     <% end %>
   </section>
 
+  <section class="app-card">
+    <h2 class="app-card__title">Notifications</h2>
+
+    <p class="app-card__description">Choose which invoice reminder events trigger an email to you.</p>
+
+    <%= form_with url: account_notification_preferences_path(script_name: @account.slug),
+      method: :patch,
+      class: "app-reminder-settings-form" do %>
+      <label class="app-reminder-setting">
+        <span class="app-row__text">
+          <span class="app-row__label">Invoice reminder sent</span>
+          <span class="app-row__note">Email me after an automatic customer reminder succeeds.</span>
+        </span>
+        <%= check_box_tag "notifications[invoice_reminder]",
+          "1",
+          @notification_preferences["invoice_reminder"]&.email?,
+          class: "app-reminder-setting__checkbox" %>
+      </label>
+
+      <label class="app-reminder-setting">
+        <span class="app-row__text">
+          <span class="app-row__label">Manual follow-up required</span>
+          <span class="app-row__note">Email me after the last automatic reminder in a customer's sequence.</span>
+        </span>
+        <%= check_box_tag "notifications[invoice_reminder_stopped]",
+          "1",
+          @notification_preferences["invoice_reminder_stopped"]&.email?,
+          class: "app-reminder-setting__checkbox" %>
+      </label>
+
+      <%= submit_tag "Save notification preferences", class: "app-primary-button" %>
+    <% end %>
+  </section>
+
 </div>
 
 <section class="app-table-card app-segment-rules-card">

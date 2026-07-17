@@ -41,6 +41,7 @@ Rails.application.routes.draw do
 
   namespace :account do
     resource :settings, only: %i[show update]
+    resource :notification_preferences, only: :update
     resource :customer_segment_refresh, only: :create
   end
 

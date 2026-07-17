@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_17_121000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_17_122000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -179,6 +179,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_121000) do
     t.index ["identity_id"], name: "index_magic_links_on_identity_id"
   end
 
+  create_table "notification_subscriptions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.boolean "email", default: false, null: false
+    t.string "event", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "event"], name: "index_notification_subscriptions_on_user_id_and_event", unique: true
+    t.index ["user_id"], name: "index_notification_subscriptions_on_user_id"
+  end
+
   create_table "sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "identity_id", null: false
@@ -217,6 +227,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_121000) do
   add_foreign_key "invoices", "customers"
   add_foreign_key "invoices", "invoice_sources"
   add_foreign_key "magic_links", "identities"
+  add_foreign_key "notification_subscriptions", "users", on_delete: :cascade
   add_foreign_key "sessions", "identities"
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities"

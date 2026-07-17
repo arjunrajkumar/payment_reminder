@@ -1,6 +1,8 @@
 require "test_helper"
 
 class InvoiceReminders::SendJobTest < ActiveJob::TestCase
+  include ActionMailer::TestHelper
+
   setup do
     @invoice = invoices(:xero_invoice)
     @invoice.account.update!(automatic_invoice_reminders_enabled: true)
@@ -42,8 +44,10 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     sent_at = Time.zone.local(2026, 7, 24, 12)
 
     travel_to sent_at do
-      assert_difference -> { @invoice.invoice_reminders.count }, 1 do
-        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      assert_no_emails do
+        assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+          InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+        end
       end
     end
 
@@ -57,11 +61,14 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "creates a failed receipt when the email is not sent" do
+    subscribe_to(:invoice_reminder)
     InvoiceReminders::SendJob.any_instance.stubs(:send_email).returns(false)
 
     travel_to Time.zone.local(2026, 8, 3, 12) do
-      assert_difference -> { @invoice.invoice_reminders.count }, 1 do
-        InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 3, "direct")
+      assert_no_emails do
+        assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+          InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 3, "direct")
+        end
       end
     end
 
@@ -87,14 +94,45 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_nil reminder.sent_at
   end
 
-  test "logs notification placeholders after the final reminder" do
-    Rails.logger.stubs(:info)
-    Rails.logger.expects(:info).with("Create notifications").once
-    Rails.logger.expects(:info).with("Create final-stage escalation notification").once
+  test "notifies subscribed users after a successful reminder" do
+    subscribe_to(:invoice_reminder)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_emails 1 do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+
+    assert_equal "Upcoming Payment Due: Invoice INV-001", ActionMailer::Base.deliveries.last.subject
+  end
+
+  test "sends the reminder and manual follow-up notifications after the terminal stage" do
+    subscribe_to(:invoice_reminder, :invoice_reminder_stopped)
 
     travel_to Time.zone.local(2026, 8, 14, 12) do
-      InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 14, "final")
+      assert_emails 2 do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 14, "final")
+      end
     end
+
+    assert_equal [
+      "URGENT: Invoice INV-001 - Immediate Action Required",
+      "Final Reminder Sent for Invoice INV-001 - Manual Follow-up Required"
+    ], ActionMailer::Base.deliveries.last(2).map(&:subject)
+  end
+
+  test "a notification failure does not change a successful reminder receipt" do
+    subscribe_to(:invoice_reminder)
+    InvoiceReminderNotificationMailer.stubs(:reminder_sent).raises(StandardError, "notification failed")
+    Rails.logger.stubs(:error)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+
+    assert_predicate @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7"), :status_sent?
   end
 
   test "does not send a queued reminder after the account disables reminders" do
@@ -315,8 +353,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "does not trust a queued final tone" do
-    Rails.logger.stubs(:info)
-    Rails.logger.expects(:info).with("Create final-stage escalation notification").never
+    subscribe_to(:invoice_reminder_stopped)
     InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
       invoice: @invoice,
       stage_key: "pre_due_7",
@@ -324,8 +361,44 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     ).returns(true)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
-      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "final")
+      assert_no_emails do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "final")
+      end
     end
+  end
+
+  test "the terminal stage still triggers manual follow-up when its tone changes" do
+    subscribe_to(:invoice_reminder_stopped)
+    @invoice.account.invoice_schedules.find_by!(
+      kind: @invoice.customer.payer_segment,
+      category: :overdue,
+      day_offset: 14
+    ).update!(tone: :firm)
+
+    travel_to Time.zone.local(2026, 8, 14, 12) do
+      assert_emails 1 do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 14, "final")
+      end
+    end
+
+    assert_equal "Final Reminder Sent for Invoice INV-001 - Manual Follow-up Required",
+      ActionMailer::Base.deliveries.last.subject
+  end
+
+  test "a pre-due-only sequence does not trigger an overdue manual follow-up" do
+    subscribe_to(:invoice_reminder_stopped)
+    @invoice.account.invoice_schedules.where(
+      kind: @invoice.customer.payer_segment,
+      category: :overdue
+    ).delete_all
+
+    travel_to Time.zone.local(2026, 7, 30, 12) do
+      assert_no_emails do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 1, "direct")
+      end
+    end
+
+    assert_predicate @invoice.invoice_reminders.find_by!(stage_key: "pre_due_1"), :status_sent?
   end
 
   test "skips a customer without an email and creates no receipt" do
@@ -406,6 +479,15 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   private
+    def subscribe_to(*events)
+      user = users(:arjun)
+      user.update!(identity: Identity.create!(email_address: "notifications@example.com"))
+      events.each do |event|
+        user.notification_subscriptions.create!(event:, email: true)
+      end
+      user
+    end
+
     def replace_schedule(kind:, category:, day_offset:, tone:)
       @invoice.account.invoice_schedules.where(kind:, category:, day_offset:).delete_all
       @invoice.account.invoice_schedules.create!(kind:, category:, day_offset:, tone:)

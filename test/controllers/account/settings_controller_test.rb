@@ -18,13 +18,19 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".app-card__title", "Accounting integration"
     assert_select "a[href=?]", new_xero_connection_path, "Connect"
     assert_select "a[href=?]", new_stripe_connection_path, "Connect"
-    assert_select ".app-card", count: 3
+    assert_select ".app-card", count: 4
     assert_select ".app-card", text: /Invoice reminders/ do
       assert_select "input[name='account[automatic_invoice_reminders_enabled]'][type='checkbox']:not([checked])"
       assert_select "input[type='submit'][value='Save reminder settings']"
     end
     assert_select "section", { text: "Reminder cadence", count: 0 }
-    assert_select "section", { text: "Notifications", count: 0 }
+    assert_select ".app-card", text: /Notifications/ do
+      assert_select "form[action=?]", account_notification_preferences_path(script_name: account.slug) do
+        assert_select "input[name='notifications[invoice_reminder]'][type='checkbox']:not([checked])"
+        assert_select "input[name='notifications[invoice_reminder_stopped]'][type='checkbox']:not([checked])"
+        assert_select "input[type='submit'][value='Save notification preferences']"
+      end
+    end
     assert_select "form[action=?]", session_path(script_name: nil) do
       assert_select "button", "Sign out"
     end
@@ -102,6 +108,42 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Invoice reminder settings saved.", flash[:notice]
     assert_predicate account.reload, :automatic_invoice_reminders_enabled?
     assert_not_predicate other_account.reload, :automatic_invoice_reminders_enabled?
+  end
+
+  test "update saves notification preferences for the current user" do
+    account = sign_up_and_complete(email_address: "owner-notifications@example.com")
+    current_user = Identity.find_by!(email_address: "owner-notifications@example.com").users.find_by!(account:)
+    other_user = Account.create_with_owner(
+      account: { name: "Other Notifications Account" },
+      owner: {
+        name: "Other Owner",
+        identity: Identity.create!(email_address: "other-notifications@example.com")
+      }
+    ).users.owner.first
+    other_user.notification_subscriptions.create!(event: :invoice_reminder, email: true)
+    other_membership = other_user.account.users.create!(
+      name: "Owner in another account",
+      identity: current_user.identity
+    )
+    other_membership.notification_subscriptions.create!(event: :invoice_reminder, email: false)
+
+    patch account_notification_preferences_url(script_name: account.slug), params: {
+      notifications: {
+        invoice_reminder: "1"
+      }
+    }
+
+    assert_redirected_to account_settings_url(script_name: account.slug)
+    assert_equal "Notification preferences saved.", flash[:notice]
+    assert_predicate current_user.notification_subscriptions.find_by!(event: :invoice_reminder), :email?
+    assert_not_predicate current_user.notification_subscriptions.find_by!(event: :invoice_reminder_stopped), :email?
+    assert_predicate other_user.notification_subscriptions.find_by!(event: :invoice_reminder), :email?
+    assert_not_predicate other_membership.notification_subscriptions.find_by!(event: :invoice_reminder), :email?
+
+    patch account_notification_preferences_url(script_name: account.slug)
+
+    assert_not_predicate current_user.notification_subscriptions.find_by!(event: :invoice_reminder).reload, :email?
+    assert_not_predicate current_user.notification_subscriptions.find_by!(event: :invoice_reminder_stopped).reload, :email?
   end
 
   test "update renders invalid debtor rating rules" do

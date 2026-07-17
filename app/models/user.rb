@@ -3,6 +3,7 @@ class User < ApplicationRecord
 
   belongs_to :account
   belongs_to :identity, optional: true
+  has_many :notification_subscriptions, dependent: :destroy, inverse_of: :user
 
   validates :name, presence: true
 

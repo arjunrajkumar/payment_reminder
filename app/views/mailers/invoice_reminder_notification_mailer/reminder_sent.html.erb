@@ -1,0 +1,13 @@
+<h1>Invoice reminder sent</h1>
+
+<p>An automatic invoice reminder was sent to <strong><%= @customer_name %></strong>.</p>
+
+<h2>Reminder details</h2>
+
+<ul>
+  <li><strong>Customer:</strong> <%= @customer_name %></li>
+  <li><strong>Invoice:</strong> <%= @invoice_reference %></li>
+  <li><strong>Due date:</strong> <%= @due_date %></li>
+  <li><strong>Outstanding amount:</strong> <%= @outstanding_amount %></li>
+  <li><strong>Stage:</strong> <%= @stage %></li>
+</ul>

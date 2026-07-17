@@ -24,4 +24,12 @@ class InvoiceSchedule < ApplicationRecord
   def invoice_due_on_for(reminder_on:)
     category_pre_due? ? reminder_on + day_offset.days : reminder_on - day_offset.days
   end
+
+  def terminal?
+    latest_stage = account.invoice_schedules.where(kind:).max_by do |schedule|
+      schedule.category_pre_due? ? -schedule.day_offset : schedule.day_offset
+    end
+
+    self == latest_stage
+  end
 end

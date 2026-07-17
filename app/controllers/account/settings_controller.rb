@@ -2,6 +2,7 @@ class Account::SettingsController < ApplicationController
   before_action :set_account
   before_action :set_invoice_sources
   before_action :set_customer_segments
+  before_action :set_notification_preferences
 
   def show; end
 
@@ -29,6 +30,11 @@ class Account::SettingsController < ApplicationController
 
     def set_customer_segments
       @customer_segments = @account.customer_segments.index_by(&:payer_segment)
+    end
+
+    def set_notification_preferences
+      notification_user = @account.users.active.find_by!(identity: Current.identity)
+      @notification_preferences = notification_user.notification_subscriptions.index_by(&:event)
     end
 
     def account_params

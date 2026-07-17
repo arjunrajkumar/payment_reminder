@@ -93,15 +93,16 @@ class InvoiceReminders::SendJob < ApplicationJob
     end
 
     def deliver_reminder(invoice:, stage:)
+      terminal = stage.category_overdue? && stage.terminal?
       email_sent, failure_reason = send_email_result(
         invoice:,
         stage_key: stage.key,
         tone: stage.tone.to_s
       )
 
-      record_delivery(invoice:, stage:, email_sent:, failure_reason:)
+      reminder = record_delivery(invoice:, stage:, email_sent:, failure_reason:)
       log_delivery(invoice:, stage:, email_sent:)
-      log_notification_placeholders(stage:) if email_sent
+      notify_account_users(invoice:, reminder:, terminal:) if email_sent
     end
 
     def record_delivery(invoice:, stage:, email_sent:, failure_reason:)
@@ -131,9 +132,8 @@ class InvoiceReminders::SendJob < ApplicationJob
       )
     end
 
-    def log_notification_placeholders(stage:)
-      Rails.logger.info "Create notifications"
-      Rails.logger.info "Create final-stage escalation notification" if stage.tone.to_sym == :final
+    def notify_account_users(invoice:, reminder:, terminal:)
+      InvoiceReminders::Notifier.deliver(invoice:, reminder:, terminal:)
     end
 
     def send_email_result(invoice:, stage_key:, tone:)

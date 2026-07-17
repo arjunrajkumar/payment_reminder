@@ -88,4 +88,25 @@ class InvoiceScheduleTest < ActiveSupport::TestCase
     assert_equal Date.new(2026, 7, 10),
       invoice_schedules(:normal_overdue_14).invoice_due_on_for(reminder_on:)
   end
+
+  test "identifies the last chronological stage as terminal independently of tone" do
+    terminal_stage = invoice_schedules(:normal_overdue_14)
+    terminal_stage.update!(tone: :firm)
+
+    assert_predicate terminal_stage, :terminal?
+    assert_not_predicate @schedule, :terminal?
+  end
+
+  test "a newly added later stage becomes terminal" do
+    previous_terminal = invoice_schedules(:normal_overdue_14)
+    later_stage = @schedule.account.invoice_schedules.create!(
+      kind: :normal_debtor,
+      category: :overdue,
+      day_offset: 21,
+      tone: :direct
+    )
+
+    assert_predicate later_stage, :terminal?
+    assert_not_predicate previous_terminal, :terminal?
+  end
 end

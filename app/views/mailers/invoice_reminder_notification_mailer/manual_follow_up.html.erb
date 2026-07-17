@@ -1,0 +1,21 @@
+<h1>Manual follow-up required</h1>
+
+<p>The automated reminder cycle for invoice <strong><%= @invoice_reference %></strong> is complete.</p>
+
+<h2>Invoice details</h2>
+
+<ul>
+  <li><strong>Client:</strong> <%= @customer_name %></li>
+  <li><strong>Invoice:</strong> <%= @invoice_reference %></li>
+  <li><strong>Due date:</strong> <%= @due_date %></li>
+  <li><strong>Days overdue:</strong> <%= @days_overdue %></li>
+  <li><strong>Outstanding amount:</strong> <%= @outstanding_amount %></li>
+</ul>
+
+<h2>Suggested next steps</h2>
+
+<ul>
+  <li>Contact the client directly to confirm they received the invoice.</li>
+  <li>Ask for the current payment status and agree on a payment date.</li>
+  <li>Decide whether further collection or escalation is appropriate.</li>
+</ul>

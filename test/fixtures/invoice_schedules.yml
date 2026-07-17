@@ -1,0 +1,97 @@
+good_pre_due_3:
+  account: paid_jar
+  kind: good_debtor
+  category: pre_due
+  day_offset: 3
+  tone: friendly
+
+good_overdue_3:
+  account: paid_jar
+  kind: good_debtor
+  category: overdue
+  day_offset: 3
+  tone: neutral
+
+good_overdue_10:
+  account: paid_jar
+  kind: good_debtor
+  category: overdue
+  day_offset: 10
+  tone: final
+
+normal_pre_due_7:
+  account: paid_jar
+  kind: normal_debtor
+  category: pre_due
+  day_offset: 7
+  tone: friendly
+
+normal_pre_due_1:
+  account: paid_jar
+  kind: normal_debtor
+  category: pre_due
+  day_offset: 1
+  tone: direct
+
+normal_overdue_3:
+  account: paid_jar
+  kind: normal_debtor
+  category: overdue
+  day_offset: 3
+  tone: direct
+
+normal_overdue_7:
+  account: paid_jar
+  kind: normal_debtor
+  category: overdue
+  day_offset: 7
+  tone: firm
+
+normal_overdue_14:
+  account: paid_jar
+  kind: normal_debtor
+  category: overdue
+  day_offset: 14
+  tone: final
+
+bad_pre_due_14:
+  account: paid_jar
+  kind: bad_debtor
+  category: pre_due
+  day_offset: 14
+  tone: direct
+
+bad_pre_due_7:
+  account: paid_jar
+  kind: bad_debtor
+  category: pre_due
+  day_offset: 7
+  tone: direct
+
+bad_pre_due_3:
+  account: paid_jar
+  kind: bad_debtor
+  category: pre_due
+  day_offset: 3
+  tone: direct
+
+bad_pre_due_1:
+  account: paid_jar
+  kind: bad_debtor
+  category: pre_due
+  day_offset: 1
+  tone: direct
+
+bad_overdue_1:
+  account: paid_jar
+  kind: bad_debtor
+  category: overdue
+  day_offset: 1
+  tone: firm
+
+bad_overdue_5:
+  account: paid_jar
+  kind: bad_debtor
+  category: overdue
+  day_offset: 5
+  tone: final

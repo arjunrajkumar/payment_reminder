@@ -179,6 +179,118 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     end
   end
 
+  test "uses the current persisted schedule tone instead of the queued tone" do
+    schedule = replace_schedule(
+      kind: @invoice.customer.payer_segment,
+      category: "pre_due",
+      day_offset: 7,
+      tone: "friendly"
+    )
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      schedule.update!(tone: "firm")
+      InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
+        invoice: @invoice,
+        stage_key: "pre_due_7",
+        tone: "firm"
+      ).returns(true)
+
+      assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+        perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+      end
+    end
+
+    assert_predicate @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7"), :tone_firm?
+  end
+
+  test "skips a queued reminder after its persisted schedule is deleted" do
+    schedule = replace_schedule(
+      kind: @invoice.customer.payer_segment,
+      category: "pre_due",
+      day_offset: 7,
+      tone: "friendly"
+    )
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      schedule.destroy!
+      InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+      end
+    end
+  end
+
+  test "records the delivery when its schedule is deleted while sending" do
+    schedule = replace_schedule(
+      kind: @invoice.customer.payer_segment,
+      category: "pre_due",
+      day_offset: 7,
+      tone: "friendly"
+    )
+    job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
+    job.define_singleton_method(:send_email) do |**|
+      schedule.destroy!
+      true
+    end
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+        job.perform_now
+      end
+    end
+
+    reminder = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7")
+    assert_nil reminder.invoice_schedule
+    assert_predicate reminder, :status_sent?
+    assert_predicate reminder, :tone_friendly?
+  end
+
+  test "skips a queued reminder after its persisted schedule timing changes" do
+    schedule = replace_schedule(
+      kind: @invoice.customer.payer_segment,
+      category: "pre_due",
+      day_offset: 7,
+      tone: "friendly"
+    )
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      schedule.update!(day_offset: 5)
+      InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+      end
+    end
+  end
+
+  test "does not resend the same persisted schedule after its timing changes" do
+    schedule = replace_schedule(
+      kind: @invoice.customer.payer_segment,
+      category: "pre_due",
+      day_offset: 7,
+      tone: "friendly"
+    )
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+    end
+
+    assert_equal schedule, @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7").invoice_schedule
+
+    schedule.update!(day_offset: 6)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 25, 12) do
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 6, "friendly")
+      end
+    end
+  end
+
   test "records the current policy tone on a sent receipt" do
     @invoice.customer.update!(customer_segment: customer_segments(:bad_debtor_segment))
 
@@ -292,4 +404,10 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 3, "direct")
     end
   end
+
+  private
+    def replace_schedule(kind:, category:, day_offset:, tone:)
+      @invoice.account.invoice_schedules.where(kind:, category:, day_offset:).delete_all
+      @invoice.account.invoice_schedules.create!(kind:, category:, day_offset:, tone:)
+    end
 end

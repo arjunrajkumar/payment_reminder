@@ -207,6 +207,108 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     end
   end
 
+  test "queues an account-specific added schedule" do
+    reminder_on = Date.new(2026, 11, 17)
+    @account.invoice_schedules.create!(
+      kind: :good_debtor,
+      category: :pre_due,
+      day_offset: 5,
+      tone: :firm
+    )
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoice = create_invoice(customer:, due_on: reminder_on + 5.days)
+      Account.expects(:find_each).yields(@account)
+
+      assert_enqueued_with(
+        job: InvoiceReminders::SendJob,
+        args: [ invoice.id, "pre_due", 5, "firm" ]
+      ) do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "does not queue a default stage absent from the account schedule" do
+    reminder_on = Date.new(2026, 11, 17)
+    @account.invoice_schedules
+      .where(kind: :good_debtor, category: :pre_due, day_offset: 3)
+      .destroy_all
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      create_invoice(customer:, due_on: reminder_on + 3.days)
+      Account.expects(:find_each).yields(@account)
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "does not apply one account's added schedule to another account" do
+    reminder_on = Date.new(2026, 11, 17)
+    @account.invoice_schedules.create!(
+      kind: :good_debtor,
+      category: :pre_due,
+      day_offset: 5,
+      tone: :firm
+    )
+    other_account = Account.create!(
+      name: "Other Custom Schedule Account",
+      automatic_invoice_reminders_enabled: true
+    )
+    other_invoice_source = other_account.invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "other-custom-schedule-account"
+    )
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      other_customer = create_customer(
+        payer_segment: :good_debtor,
+        account: other_account,
+        invoice_source: other_invoice_source
+      )
+      create_invoice(customer: other_customer, due_on: reminder_on + 5.days)
+      Account.expects(:find_each).multiple_yields([ @account ], [ other_account ])
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "does not queue a delivered schedule again after its timing changes" do
+    reminder_on = Date.new(2026, 11, 17)
+    schedule = @account.invoice_schedules.find_by!(
+      kind: :good_debtor,
+      category: :pre_due,
+      day_offset: 3
+    )
+    customer = create_customer(payer_segment: :good_debtor)
+    invoice = create_invoice(customer:, due_on: reminder_on + 2.days)
+    invoice.invoice_reminders.create!(
+      account: @account,
+      invoice_schedule: schedule,
+      category: :pre_due,
+      day_offset: 3,
+      stage_key: "pre_due_3",
+      status: :sent,
+      sent_at: reminder_on - 1.day
+    )
+    schedule.update!(day_offset: 2)
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      Account.expects(:find_each).yields(@account)
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
   private
     def create_customer(payer_segment:, account: @account, invoice_source: @invoice_source)
       Customer.create!(

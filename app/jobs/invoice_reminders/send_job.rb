@@ -14,8 +14,9 @@ class InvoiceReminders::SendJob < ApplicationJob
     return unless invoice
     return unless eligible_for_delivery?(invoice:, stage_key:)
 
-    stage = current_stage_for(invoice:, stage_key:)
+    stage = current_stage_for(invoice:, category:, day_offset:)
     return unless stage
+    return unless stage_not_delivered?(invoice:, stage:)
     return unless stage_due_today?(invoice:, stage:)
     return unless recipient_available?(invoice:, stage_key:)
 
@@ -50,13 +51,25 @@ class InvoiceReminders::SendJob < ApplicationJob
       true
     end
 
-    def current_stage_for(invoice:, stage_key:)
+    def current_stage_for(invoice:, category:, day_offset:)
       payer_segment = invoice.customer.payer_segment
-      stage = InvoiceReminder::Policy.stage_for(payer_segment:, stage_key:)
+      stage = invoice.account.invoice_schedules.find_by(
+        kind: payer_segment,
+        category:,
+        day_offset:
+      )
       return stage if stage
 
-      log_skip(invoice:, stage_key:, reason: "stage_not_in_current_policy", payer_segment:)
+      stage_key = "#{category}_#{day_offset}"
+      log_skip(invoice:, stage_key:, reason: "stage_not_in_current_schedule", payer_segment:)
       nil
+    end
+
+    def stage_not_delivered?(invoice:, stage:)
+      return true unless invoice.invoice_reminders.exists?(invoice_schedule: stage)
+
+      log_skip(invoice:, stage_key: stage.key, reason: "duplicate_stage")
+      false
     end
 
     def stage_due_today?(invoice:, stage:)
@@ -92,7 +105,7 @@ class InvoiceReminders::SendJob < ApplicationJob
     end
 
     def record_delivery(invoice:, stage:, email_sent:, failure_reason:)
-      invoice.invoice_reminders.create!(
+      receipt_attributes = {
         account: invoice.account,
         category: stage.category,
         day_offset: stage.day_offset,
@@ -101,7 +114,11 @@ class InvoiceReminders::SendJob < ApplicationJob
         tone: stage.tone.to_s,
         sent_at: email_sent ? Time.current : nil,
         failure_reason:
-      )
+      }
+
+      invoice.invoice_reminders.create!(receipt_attributes.merge(invoice_schedule: stage))
+    rescue ActiveRecord::InvalidForeignKey
+      invoice.invoice_reminders.create!(receipt_attributes)
     end
 
     def log_delivery(invoice:, stage:, email_sent:)
@@ -116,7 +133,7 @@ class InvoiceReminders::SendJob < ApplicationJob
 
     def log_notification_placeholders(stage:)
       Rails.logger.info "Create notifications"
-      Rails.logger.info "Create final-stage escalation notification" if stage.tone == :final
+      Rails.logger.info "Create final-stage escalation notification" if stage.tone.to_sym == :final
     end
 
     def send_email_result(invoice:, stage_key:, tone:)

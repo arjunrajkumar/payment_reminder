@@ -38,6 +38,10 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert build_reminder(tone: nil).valid?
   end
 
+  test "allows legacy receipts without an invoice schedule" do
+    assert build_reminder(invoice_schedule: nil).valid?
+  end
+
   test "rejects an unsupported delivery tone" do
     reminder = build_reminder(tone: "urgent")
 
@@ -89,6 +93,29 @@ class InvoiceReminderTest < ActiveSupport::TestCase
 
     assert_not reminder.valid?
     assert_includes reminder.errors[:account], "must match invoice account"
+  end
+
+  test "requires its invoice schedule to belong to the same account" do
+    other_account = Account.create!(name: "Other Schedule Receipt Account")
+    other_schedule = other_account.invoice_schedules.first
+    reminder = build_reminder(invoice_schedule: other_schedule)
+
+    assert_not reminder.valid?
+    assert_includes reminder.errors[:invoice_schedule], "must belong to the same account"
+  end
+
+  test "allows one receipt per persisted schedule after its timing changes" do
+    schedule = invoice_schedules(:normal_pre_due_7)
+    build_reminder(invoice_schedule: schedule).save!
+    schedule.update!(day_offset: 6)
+    duplicate = build_reminder(
+      invoice_schedule: schedule,
+      stage_key: "pre_due_6",
+      day_offset: 6
+    )
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:invoice_schedule_id], "has already been taken"
   end
 
   test "enforces stage uniqueness in the database" do

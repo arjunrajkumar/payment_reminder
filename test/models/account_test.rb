@@ -23,6 +23,10 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes accounts(:paid_jar).customers, customers(:xero_customer)
   end
 
+  test "has many invoice schedules" do
+    assert_includes accounts(:paid_jar).invoice_schedules, invoice_schedules(:good_pre_due_3)
+  end
+
   test "has one rule for every customer payer segment" do
     account = accounts(:paid_jar)
 
@@ -91,6 +95,20 @@ class AccountTest < ActiveSupport::TestCase
     assert_equal 80, account.customer_segment(:good_debtor).on_time_rate
     assert_nil account.customer_segment(:normal_debtor).on_time_rate
     assert_equal 50, account.customer_segment(:bad_debtor).on_time_rate
+  end
+
+  test "creates the default invoice schedules" do
+    account = Account.create!(name: "Invoice Schedule Defaults")
+    expected_schedules = InvoiceReminder::Policy::SCHEDULES.flat_map do |kind, stages|
+      stages.map do |stage|
+        [ kind.to_s, stage.category.to_s, stage.day_offset, stage.tone.to_s ]
+      end
+    end
+    actual_schedules = account.invoice_schedules.map do |schedule|
+      [ schedule.kind, schedule.category, schedule.day_offset, schedule.tone ]
+    end
+
+    assert_equal expected_schedules.sort, actual_schedules.sort
   end
 
   test "keeps the good debtor threshold above the bad debtor threshold" do

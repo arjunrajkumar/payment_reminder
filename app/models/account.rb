@@ -6,7 +6,7 @@ class Account < ApplicationRecord
   has_many :users, dependent: :destroy
   has_many :customer_segments, dependent: :destroy, inverse_of: :account
 
-  include CustomerSegments, Remindable
+  include CustomerSegments, InvoiceSchedules, Remindable
 
   before_create :assign_external_account_id
 

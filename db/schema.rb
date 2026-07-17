@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_16_140000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_17_113000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -69,6 +69,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_16_140000) do
     t.datetime "sent_at"
     t.string "stage_key", null: false
     t.string "status", default: "sent", null: false
+    t.string "tone"
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_invoice_reminders_on_account_id"
     t.index ["invoice_id", "stage_key"], name: "index_invoice_reminders_on_invoice_id_and_stage_key", unique: true

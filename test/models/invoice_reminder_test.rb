@@ -28,6 +28,23 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_equal "delivery failed", reminder.failure_reason
   end
 
+  test "accepts every supported delivery tone" do
+    InvoiceReminder::TONES.values.each do |tone|
+      assert build_reminder(tone:).valid?, "Expected #{tone} to be valid"
+    end
+  end
+
+  test "allows legacy receipts without a delivery tone" do
+    assert build_reminder(tone: nil).valid?
+  end
+
+  test "rejects an unsupported delivery tone" do
+    reminder = build_reminder(tone: "urgent")
+
+    assert_not reminder.valid?
+    assert_includes reminder.errors[:tone], "is not included in the list"
+  end
+
   test "requires a valid category status and stage" do
     reminder = build_reminder(
       category: "other",

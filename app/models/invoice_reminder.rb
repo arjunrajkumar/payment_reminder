@@ -7,12 +7,20 @@ class InvoiceReminder < ApplicationRecord
     sent: "sent",
     failed: "failed"
   }.freeze
+  TONES = {
+    friendly: "friendly",
+    neutral: "neutral",
+    direct: "direct",
+    firm: "firm",
+    final: "final"
+  }.freeze
 
   belongs_to :account, inverse_of: :invoice_reminders
   belongs_to :invoice, inverse_of: :invoice_reminders
 
   enum :category, CATEGORIES, prefix: true, validate: true
   enum :status, STATUSES, prefix: true, validate: true
+  enum :tone, TONES, prefix: true, validate: { allow_nil: true }
 
   validates :stage_key, presence: true
   validates :stage_key, uniqueness: { scope: :invoice_id }

@@ -98,6 +98,7 @@ class InvoiceReminders::SendJob < ApplicationJob
         day_offset: stage.day_offset,
         stage_key: stage.key,
         status: email_sent ? :sent : :failed,
+        tone: stage.tone.to_s,
         sent_at: email_sent ? Time.current : nil,
         failure_reason:
       )

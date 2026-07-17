@@ -179,6 +179,29 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     end
   end
 
+  test "records the current policy tone on a sent receipt" do
+    @invoice.customer.update!(customer_segment: customer_segments(:bad_debtor_segment))
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+    end
+
+    reminder = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7")
+    assert_predicate reminder, :tone_direct?
+  end
+
+  test "records the current policy tone on a failed receipt" do
+    InvoiceReminders::SendJob.any_instance.stubs(:send_email).returns(false)
+
+    travel_to Time.zone.local(2026, 8, 3, 12) do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 3, "direct")
+    end
+
+    reminder = @invoice.invoice_reminders.find_by!(stage_key: "overdue_3")
+    assert_predicate reminder, :status_failed?
+    assert_predicate reminder, :tone_direct?
+  end
+
   test "does not trust a queued final tone" do
     Rails.logger.stubs(:info)
     Rails.logger.expects(:info).with("Create final-stage escalation notification").never

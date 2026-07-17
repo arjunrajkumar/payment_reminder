@@ -1,0 +1,5 @@
+class AddToneToInvoiceReminders < ActiveRecord::Migration[8.1]
+  def change
+    add_column :invoice_reminders, :tone, :string
+  end
+end

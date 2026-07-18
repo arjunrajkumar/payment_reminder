@@ -20,8 +20,9 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", new_stripe_connection_path, "Connect"
     assert_select ".app-card", count: 4
     assert_select ".app-card", text: /Invoice reminders/ do
-      assert_select "input[name='account[invoice_reminder_from_email]'][type='email'][maxlength='254'][value=?]", "owner-settings@example.com"
-      assert_select "input[name='account[automatic_invoice_reminders_enabled]'][type='checkbox']:not([checked])"
+      assert_select "a[href=?]", new_gmail_connection_path(script_name: account.slug), "Connect Gmail"
+      assert_select "input[name='account[invoice_reminder_from_email]']", count: 0
+      assert_select "input[name='account[automatic_invoice_reminders_enabled]'][type='checkbox'][disabled]:not([checked])"
       assert_select "input[type='submit'][value='Save reminder settings']"
     end
     assert_select "section", { text: "Reminder cadence", count: 0 }
@@ -55,6 +56,25 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".app-pill", "Connected"
     assert_select "form[action=?]", invoice_source_refresh_path(source) do
       assert_select "button", "Resync"
+    end
+  end
+
+  test "connected Gmail shows its address status sender controls and delivery actions" do
+    account = sign_up_and_complete(email_address: "owner-connected-gmail@example.com")
+    connect_gmail(account, email: "billing@example.com")
+
+    get account_settings_url(script_name: account.slug)
+
+    assert_response :success
+    assert_select ".app-card", text: /Invoice reminders/ do
+      assert_select ".app-row__note", "billing@example.com"
+      assert_select ".app-pill", "Active"
+      assert_select "input[name='account[invoice_reminder_from_name]'][value=?]", account.name
+      assert_select "input[name='account[invoice_reminder_from_email]']", count: 0
+      assert_select "a[href=?]", new_gmail_connection_path(script_name: account.slug), "Reconnect Gmail"
+      assert_select "form[action=?]", test_gmail_connection_path(script_name: account.slug)
+      assert_select "form[action=?]", gmail_connection_path(script_name: account.slug)
+      assert_select "input[name='account[automatic_invoice_reminders_enabled]'][type='checkbox']:not([disabled])"
     end
   end
 
@@ -99,6 +119,7 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
 
   test "update enables automatic invoice reminders for the current account" do
     account = sign_up_and_complete(email_address: "owner-reminder-settings@example.com")
+    connect_gmail(account, email: "billing@example.com")
     other_account = Account.create!(name: "Other Reminder Settings Account")
 
     patch account_settings_url(script_name: account.slug), params: {
@@ -111,37 +132,34 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_not_predicate other_account.reload, :automatic_invoice_reminders_enabled?
   end
 
-  test "update saves the invoice reminder sender for the current account" do
+  test "update saves the invoice reminder sender name for the current account" do
     account = sign_up_and_complete(email_address: "owner-sender-settings@example.com")
-    other_account = Account.create!(
-      name: "Other Sender Settings Account",
-      invoice_reminder_from_email: "other@example.com"
-    )
+    connect_gmail(account, email: "billing@example.com")
+    other_account = Account.create!(name: "Other Sender Settings Account")
 
     patch account_settings_url(script_name: account.slug), params: {
-      account: { invoice_reminder_from_email: " Billing@Example.COM " }
+      account: { invoice_reminder_from_name: "Accounts Team" }
     }
 
     assert_redirected_to account_settings_url(script_name: account.slug)
     assert_equal "Invoice reminder settings saved.", flash[:notice]
-    assert_equal "billing@example.com", account.reload.invoice_reminder_from_email
-    assert_equal "other@example.com", other_account.reload.invoice_reminder_from_email
+    assert_equal "Accounts Team", account.reload.invoice_reminder_from_name
+    assert_nil other_account.reload.invoice_reminder_from_name
   end
 
-  test "update renders an invalid invoice reminder sender" do
+  test "update refuses to enable reminders without an active Gmail connection" do
     account = sign_up_and_complete(email_address: "owner-invalid-sender@example.com")
 
     patch account_settings_url(script_name: account.slug), params: {
       account: {
-        automatic_invoice_reminders_enabled: "1",
-        invoice_reminder_from_email: "not-an-email"
+        automatic_invoice_reminders_enabled: "1"
       }
     }
 
     assert_response :unprocessable_entity
-    assert_select "#flash", text: /Invoice reminder from email is invalid/
+    assert_select "#flash", text: /requires an active Gmail connection/
     assert_not_predicate account.reload, :automatic_invoice_reminders_enabled?
-    assert_equal "owner-invalid-sender@example.com", account.invoice_reminder_from_email
+    assert_nil account.invoice_reminder_from_email
   end
 
   test "update saves notification preferences for the current user" do
@@ -212,6 +230,17 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def connect_gmail(account, email:)
+      account.build_outbound_email_connection.connect_gmail!(
+        email:,
+        name: "Billing Team",
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_at: 1.hour.from_now,
+        scopes: [ "email", "profile", OutboundEmailConnection::Gmailable::SEND_SCOPE ]
+      )
+    end
+
     def debtor_rating_attributes(
       account,
       good_debtor_rate: 85,

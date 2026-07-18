@@ -1,0 +1,13 @@
+paid_jar_gmail:
+  account: paid_jar
+  provider: gmail
+  connected_email: billing@paymentreminder.example
+  provider_display_name: PaymentReminder Billing
+  access_token: gmail-access-token
+  refresh_token: gmail-refresh-token
+  token_expires_at: 2099-01-01 00:00:00
+  scopes:
+    - email
+    - profile
+    - https://www.googleapis.com/auth/gmail.send
+  status: active

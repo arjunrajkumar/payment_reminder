@@ -81,7 +81,7 @@ class AccountTest < ActiveSupport::TestCase
 
     assert_predicate account.users.find_by!(role: :system), :system?
     assert_predicate account.users.find_by!(identity: identity), :owner?
-    assert_equal "owner@example.com", account.invoice_reminder_from_email
+    assert_nil account.invoice_reminder_from_email
   end
 
   test "keeps an explicit invoice reminder sender when creating an account with an owner" do

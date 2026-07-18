@@ -53,7 +53,7 @@ class SignupsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Owner Person", user.name
     assert_equal "owner@example.com", user.identity.email_address
     assert_equal "Owner's PaymentReminder", user.account.name
-    assert_equal "owner@example.com", user.account.invoice_reminder_from_email
+    assert_nil user.account.invoice_reminder_from_email
     assert_equal magic_link.identity, user.identity
     assert_predicate user, :owner?
     assert_predicate user.verified_at, :present?

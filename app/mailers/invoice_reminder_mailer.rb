@@ -4,7 +4,10 @@ class InvoiceReminderMailer < ApplicationMailer
 
     mail(
       to: @customer.reminder_email_addresses,
-      from: email_address_with_name(@account.invoice_reminder_from_email, @account.name),
+      from: email_address_with_name(
+        @account.invoice_reminder_from_email,
+        @account.invoice_reminder_from_name.presence || @account.name
+      ),
       subject: reminder_subject
     )
   end

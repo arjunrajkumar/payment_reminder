@@ -6,7 +6,7 @@ class InvoiceReminderMailerTest < ActionMailer::TestCase
     @account = @invoice.account
     @customer = @invoice.customer
 
-    @account.update!(invoice_reminder_from_email: "accounts@paymentreminder.example")
+    @account.update!(invoice_reminder_from_name: "Accounts Team")
     @customer.additional_email_addresses.create!(email: "bookkeeper@example.com")
   end
 
@@ -18,8 +18,8 @@ class InvoiceReminderMailerTest < ActionMailer::TestCase
     end
 
     assert_equal [ "customer@example.com", "bookkeeper@example.com" ], mail.to
-    assert_equal [ "accounts@paymentreminder.example" ], mail.from
-    assert_equal [ "PaymentReminder" ], mail[:from].display_names
+    assert_equal [ "billing@paymentreminder.example" ], mail.from
+    assert_equal [ "Accounts Team" ], mail[:from].display_names
     assert_equal "Upcoming Payment Due: Invoice INV-001", mail.subject
     assert_equal "text/plain", mail.text_part.mime_type
     assert_equal "text/html", mail.html_part.mime_type

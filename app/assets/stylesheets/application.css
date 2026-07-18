@@ -43,19 +43,128 @@ body.public {
 }
 
 .public #global-container {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
   background: var(--color-canvas);
   color: var(--color-text);
 }
 
 .public-main {
-  min-height: 100vh;
+  flex: 1;
   background: var(--color-canvas);
+}
+
+.public-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  padding: 1.25rem 1rem 1.75rem;
+}
+
+.public-footer a,
+.legal-page a {
+  color: var(--color-accent);
+}
+
+.public-footer a {
+  text-decoration: none;
+}
+
+.public-footer a:hover,
+.legal-page a:hover {
+  color: var(--color-accent-dark);
+  text-decoration: underline;
+}
+
+.legal-page {
+  width: min(100% - 2rem, 48rem);
+  margin: 0 auto;
+  color: var(--color-text-soft);
+  font-size: 1rem;
+  line-height: 1.7;
+  padding: 3rem 0 2rem;
+}
+
+.legal-page__header {
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-card-border);
+}
+
+.legal-page__eyebrow {
+  margin: 0 0 0.5rem;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legal-page h1,
+.legal-page h2,
+.legal-page h3 {
+  color: var(--color-text);
+  font-family: var(--font-heading);
+}
+
+.legal-page h1 {
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 2.75rem);
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+}
+
+.legal-page__updated {
+  margin: 0.75rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.legal-page section {
+  margin-top: 2rem;
+}
+
+.legal-page h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
+}
+
+.legal-page h3 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.legal-page p,
+.legal-page ul {
+  margin: 0 0 1rem;
+}
+
+.legal-page ul {
+  padding-left: 1.4rem;
+}
+
+.legal-page li + li {
+  margin-top: 0.5rem;
+}
+
+.legal-page code {
+  border-radius: 0.25rem;
+  background: #eef2ff;
+  color: #293b91;
+  font-size: 0.9em;
+  padding: 0.1em 0.3em;
 }
 
 .auth-shell {
   display: flex;
-  min-height: 100vh;
+  min-height: calc(100vh - 4.25rem);
   align-items: center;
   justify-content: center;
   background: var(--color-canvas);

@@ -257,9 +257,18 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     )
     other_account = Account.create!(
       name: "Other Custom Schedule Account",
-      automatic_invoice_reminders_enabled: true,
       invoice_reminder_from_email: "reminders@other.example"
     )
+    other_account.create_outbound_email_connection!(
+      provider: :gmail,
+      connected_email: "reminders@other.example",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      token_expires_at: 1.hour.from_now,
+      scopes: [ OutboundEmailConnection::Gmailable::SEND_SCOPE ],
+      status: :active
+    )
+    other_account.update!(automatic_invoice_reminders_enabled: true)
     other_invoice_source = other_account.invoice_sources.create!(
       provider: :stripe,
       status: :active,

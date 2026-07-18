@@ -57,23 +57,62 @@
   <section class="app-card">
     <h2 class="app-card__title">Invoice reminders</h2>
 
+    <% if @outbound_email_connection %>
+      <div class="app-list">
+        <div class="app-row">
+          <div class="app-row__text">
+            <div class="app-row__label">Connected Gmail account</div>
+            <div class="app-row__note"><%= @outbound_email_connection.connected_email %></div>
+          </div>
+          <span class="app-pill <%= @outbound_email_connection.active? ? "app-pill--green" : "app-pill--slate" %>">
+            <%= @outbound_email_connection.status.humanize %>
+          </span>
+        </div>
+      </div>
+
+      <div class="app-settings-actions">
+        <%= link_to "Reconnect Gmail",
+          new_gmail_connection_path(script_name: @account.slug),
+          class: "app-secondary-button" %>
+        <% if @outbound_email_connection.active? %>
+          <%= button_to "Send test email",
+            test_gmail_connection_path(script_name: @account.slug),
+            class: "app-secondary-button" %>
+        <% end %>
+        <%= button_to "Disconnect Gmail",
+          gmail_connection_path(script_name: @account.slug),
+          method: :delete,
+          class: "app-secondary-button" %>
+      </div>
+    <% else %>
+      <p class="app-card__description">
+        Connect your company Gmail or Google Workspace account to send reminders from your real address.
+        PaymentReminder uses Google access only as described in our
+        <%= link_to "Privacy Policy", privacy_path(script_name: nil) %>.
+      </p>
+      <%= link_to "Connect Gmail",
+        new_gmail_connection_path(script_name: @account.slug),
+        class: "app-primary-button" %>
+    <% end %>
+
     <%= form_with model: @account,
       url: account_settings_path(script_name: @account.slug),
       method: :patch,
       class: "app-reminder-settings-form" do |form| %>
-      <div class="app-reminder-sender-field">
-        <div class="app-row__text">
-          <%= form.label :invoice_reminder_from_email,
-            "Send reminders from",
-            class: "app-row__label" %>
-          <div class="app-row__note">Customers will see this address as the sender and can reply to it.</div>
+      <% if @outbound_email_connection %>
+        <div class="app-reminder-sender-field">
+          <div class="app-row__text">
+            <%= form.label :invoice_reminder_from_name,
+              "Sender name",
+              class: "app-row__label" %>
+            <div class="app-row__note">Customers will see this name with your connected Gmail address.</div>
+          </div>
+          <%= form.text_field :invoice_reminder_from_name,
+            maxlength: 100,
+            placeholder: @account.name,
+            class: "auth-input" %>
         </div>
-        <%= form.email_field :invoice_reminder_from_email,
-          autocomplete: "email",
-          maxlength: 254,
-          placeholder: "billing@company.com",
-          class: "auth-input" %>
-      </div>
+      <% end %>
 
       <label class="app-reminder-setting">
         <span class="app-row__text">
@@ -81,6 +120,7 @@
           <span class="app-row__note">Send reminders using each customer's current debtor rating.</span>
         </span>
         <%= form.check_box :automatic_invoice_reminders_enabled,
+          disabled: !@account.outbound_email_ready?,
           class: "app-reminder-setting__checkbox" %>
       </label>
 

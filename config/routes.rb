@@ -1,5 +1,8 @@
 Rails.application.routes.draw do
   root "landing#index"
+  get "privacy", to: "pages#privacy", as: :privacy
+  get "terms", to: "pages#terms", as: :terms
+
   resources :invoices, only: :index
   resources :customers, only: [] do
     resources :email_addresses,
@@ -15,6 +18,14 @@ Rails.application.routes.draw do
     get "stripe/connect", to: "stripe_connections#new", as: :new_stripe_connection
     get "stripe/callback", to: "stripe_connections#create", as: :stripe_callback
     resource :stripe_connection, controller: :stripe_connections, only: :destroy
+  end
+
+  scope module: :outbound_email_connections do
+    get "gmail/connect", to: "gmail_connections#new", as: :new_gmail_connection
+    get "gmail/callback", to: "gmail_connections#create", as: :gmail_callback
+    resource :gmail_connection, controller: :gmail_connections, only: :destroy do
+      post :test
+    end
   end
 
   resources :invoice_sources, only: [] do

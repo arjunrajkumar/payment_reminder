@@ -9,6 +9,12 @@
       <main id="main" class="public-main">
         <%= yield %>
       </main>
+
+      <footer class="public-footer">
+        <%= link_to "Privacy Policy", privacy_path(script_name: nil) %>
+        <span aria-hidden="true">·</span>
+        <%= link_to "Terms of Service", terms_path(script_name: nil) %>
+      </footer>
     </div>
   </body>
 </html>

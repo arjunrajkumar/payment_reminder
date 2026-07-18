@@ -21,6 +21,7 @@ This app uses Ruby 3.4.5 and Rails 8.1.3.
 
 ```bash
 bin/setup
+bin/rails db:prepare
 bin/rails server
 ```
 
@@ -49,6 +50,12 @@ Please set up PaymentReminder locally.
      client_id: my-stripe-connect-client-id
      secret_key: my-stripe-secret-key
      webhook_signing_secret: whsec_my-stripe-webhook-secret
+
+   If I want Gmail delivery for invoice reminders, follow the Gmail section in this README and help me configure Rails credentials with:
+
+   google:
+     client_id: my-google-oauth-client-id
+     client_secret: my-google-oauth-client-secret
 
    Do not ask me to paste secrets into chat. Open the credentials editor and wait while I type them locally.
 7. Start the app with bin/rails server and tell me the localhost URL.
@@ -125,6 +132,103 @@ stripe listen --forward-to localhost:3000/invoice_sources/webhooks/stripe
 ```
 
 After credentials are configured, sign in and open `/account/settings` to connect Xero or Stripe.
+
+## Gmail reminder delivery
+
+PaymentReminder can send customer invoice reminders from a Gmail or Google Workspace account owned by each PaymentReminder account. The connected address becomes the reminder `From` address; the sender name can be customized in Settings.
+
+When upgrading an existing installation, apply the database changes first:
+
+```bash
+bin/rails db:migrate
+```
+
+The migration disables existing automatic reminders. Connect Gmail, send a test email, and then explicitly enable automatic reminders again so invoices are not sent from an unverified address.
+
+### 1. Create the Google OAuth application
+
+1. Create or select a project in the [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable the [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
+3. Configure the Google Auth Platform consent screen and audience:
+   - Choose **Internal** if the Google Cloud project and every sender belong to the same Google Workspace organization.
+   - Choose **External** for personal Gmail accounts or senders from different organizations. While the app is in Testing, add every Gmail account that will connect as a test user.
+4. Create an OAuth client with the **Web application** application type.
+5. Add the exact callback URL for every environment under **Authorized redirect URIs**.
+
+For local development, the callback is:
+
+```text
+http://localhost:3000/gmail/callback
+```
+
+For a production installation, replace the domain with the public HTTPS URL:
+
+```text
+https://payment-reminder.example/gmail/callback
+```
+
+PaymentReminder requests these scopes during connection:
+
+- `email`
+- `profile`
+- `https://www.googleapis.com/auth/gmail.send`
+
+The `gmail.send` scope is only used to send invoice reminders. It does not grant PaymentReminder access to read the connected mailbox.
+
+> [!IMPORTANT]
+> Google OAuth apps with an External audience and Testing status issue refresh tokens that expire after seven days when Gmail scopes are requested. That is useful for local testing, but not reliable for automatic reminders. For a long-running installation, publish the OAuth app to Production and complete Google's verification requirements if they apply to your audience.
+
+See Google's documentation for [OAuth app audiences and publishing status](https://support.google.com/cloud/answer/15549945?hl=en) and [OAuth verification](https://support.google.com/cloud/answer/13463073?hl=en).
+
+### 2. Add the Google credentials
+
+Open the Rails credentials editor:
+
+```bash
+bin/rails credentials:edit
+```
+
+Add the OAuth client credentials:
+
+```yaml
+google:
+  client_id: your-google-client-id
+  client_secret: your-google-client-secret
+```
+
+Do not commit decrypted credentials or share them in an issue. Preserve the Rails master key when backing up or moving an installation; it is required to decrypt saved OAuth tokens.
+
+OAuth callback URLs are generated as `<HOST>/gmail/callback`. `HOST` defaults to `http://localhost:3000` in development and must exactly match an authorized redirect URI in Google Cloud, including its scheme, host, port, path, and trailing slash behavior. For example, to use port 3001:
+
+```bash
+HOST=http://localhost:3001 bin/rails server -p 3001 -P tmp/pids/server-3001.pid
+```
+
+### 3. Connect and verify Gmail
+
+1. Start or restart PaymentReminder after saving the credentials.
+2. Sign in and open **Settings** (`/account/settings`).
+3. Select **Connect Gmail**, choose the address that should send reminders, and approve access.
+4. Select **Send test email** to verify delivery to the signed-in user's email address.
+5. Set the sender name, enable automatic invoice reminders, and save the reminder settings.
+
+Each PaymentReminder account has its own Gmail connection. Access and refresh tokens are encrypted at rest, and background jobs refresh access automatically. If Google access is revoked or can no longer be refreshed, automatic reminders are disabled until an account owner reconnects Gmail.
+
+Production installations must run the Solid Queue worker so scheduled reminders are processed:
+
+```bash
+bin/jobs
+```
+
+### Troubleshooting
+
+- **`redirect_uri_mismatch`**: Copy the callback generated from `HOST` into Google Cloud exactly. A different scheme, port, path, or trailing slash is a different URI to Google.
+- **Access blocked or denied**: For an External app in Testing, add the connecting Gmail address as a test user. Also confirm that the Gmail API is enabled and the consent screen includes the requested scopes.
+- **Gmail disconnects after seven days**: The Google OAuth app is likely External and still in Testing. Publish it to Production for long-lived refresh tokens.
+- **Connection shows an error**: Use **Reconnect Gmail** in Settings. This is normally required after the user revokes access, changes relevant Google security settings, or the refresh token expires.
+- **Google credentials are missing**: Confirm that `google.client_id` and `google.client_secret` exist in the Rails credentials for the environment running the app, then restart it.
+
+Connected Gmail is only used for customer invoice reminders. Sign-in links and internal notifications continue to use the installation-wide Action Mailer configuration, which production installations must configure separately.
 
 ## License
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_17_124000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_18_100000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -21,6 +21,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_124000) do
     t.datetime "created_at", null: false
     t.bigint "external_account_id"
     t.string "invoice_reminder_from_email"
+    t.string "invoice_reminder_from_name"
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
@@ -79,6 +80,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_124000) do
     t.text "failure_reason"
     t.bigint "invoice_id", null: false
     t.bigint "invoice_schedule_id"
+    t.string "provider_message_id"
     t.datetime "sent_at"
     t.string "stage_key", null: false
     t.string "status", default: "sent", null: false
@@ -201,6 +203,23 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_124000) do
     t.index ["user_id"], name: "index_notification_subscriptions_on_user_id"
   end
 
+  create_table "outbound_email_connections", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.text "access_token"
+    t.bigint "account_id", null: false
+    t.string "connected_email", null: false
+    t.datetime "created_at", null: false
+    t.text "last_error"
+    t.string "provider", null: false
+    t.string "provider_display_name"
+    t.text "refresh_token"
+    t.json "scopes", null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "token_expires_at"
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_outbound_email_connections_on_account_id", unique: true
+    t.index ["provider", "status"], name: "index_outbound_email_connections_on_provider_and_status"
+  end
+
   create_table "sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "identity_id", null: false
@@ -241,6 +260,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_124000) do
   add_foreign_key "invoices", "invoice_sources"
   add_foreign_key "magic_links", "identities"
   add_foreign_key "notification_subscriptions", "users", on_delete: :cascade
+  add_foreign_key "outbound_email_connections", "accounts"
   add_foreign_key "sessions", "identities"
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities"

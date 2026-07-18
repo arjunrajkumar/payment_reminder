@@ -53,21 +53,35 @@ Rails.application.configure do
   config.active_job.queue_adapter = :solid_queue
   config.solid_queue.connects_to = { database: { writing: :queue } }
 
-  # Ignore bad email addresses and do not raise email delivery errors.
-  # Set this to true and configure the email server for immediate delivery to raise delivery errors.
-  # config.action_mailer.raise_delivery_errors = false
+  # Surface system-email failures so queued sign-in and notification deliveries can be retried and monitored.
+  config.action_mailer.raise_delivery_errors = true
 
   # Set host to be used by links generated in mailer templates.
-  config.action_mailer.default_url_options = { host: "example.com" }
+  config.action_mailer.default_url_options = {
+    host: ENV.fetch("MAILER_HOST", "app.paymentreminderemails.com"),
+    protocol: ENV.fetch("MAILER_PROTOCOL", "https")
+  }
 
-  # Specify outgoing SMTP server. Remember to add smtp/* credentials via rails credentials:edit.
-  # config.action_mailer.smtp_settings = {
-  #   user_name: Rails.application.credentials.dig(:smtp, :user_name),
-  #   password: Rails.application.credentials.dig(:smtp, :password),
-  #   address: "smtp.example.com",
-  #   port: 587,
-  #   authentication: :plain
-  # }
+  # System email is separate from account-owned Gmail reminder delivery.
+  config.action_mailer.default_options = {
+    delivery_method_options: -> {
+      {
+        user_name: Rails.application.credentials.dig(:ses, :smtp_username),
+        password: Rails.application.credentials.dig(:ses, :smtp_password)
+      }
+    }
+  }
+
+  config.action_mailer.delivery_method = :smtp
+  config.action_mailer.smtp_settings = {
+    address: ENV.fetch("SES_SMTP_ADDRESS", "email-smtp.us-east-1.amazonaws.com"),
+    port: ENV.fetch("SES_SMTP_PORT", 587).to_i,
+    domain: ENV.fetch("MAILER_DOMAIN", "paymentreminderemails.com"),
+    authentication: :login,
+    enable_starttls_auto: true,
+    open_timeout: 5,
+    read_timeout: 5
+  }
 
   # Enable locale fallbacks for I18n (makes lookups for any locale fall back to
   # the I18n.default_locale when a translation cannot be found).

@@ -133,6 +133,41 @@ stripe listen --forward-to localhost:3000/invoice_sources/webhooks/stripe
 
 After credentials are configured, sign in and open `/account/settings` to connect Xero or Stripe.
 
+## System email
+
+PaymentReminder uses installation-wide system email for sign-in codes and internal notifications. This is separate from account-owned Gmail delivery, which is only used to send invoice reminders to customers.
+
+The official hosted installation uses [Amazon Simple Email Service (SES)](https://aws.amazon.com/ses/) with these defaults:
+
+- AWS Region: `us-east-1`
+- Sending domain: `paymentreminderemails.com`
+- From address: `PaymentReminder <support@paymentreminderemails.com>`
+- Application link host: `app.paymentreminderemails.com`
+
+To configure Amazon SES for production:
+
+1. Open Amazon SES in the `us-east-1` Region and create a domain identity for `paymentreminderemails.com`.
+2. Enable Easy DKIM and publish the DNS records supplied by SES. Cloudflare users must set CNAME records to **DNS only**.
+3. Request production access if the SES account is still in the sandbox. While sandboxed, SES can only send to verified recipient addresses.
+4. From **SMTP settings**, create dedicated SMTP credentials for PaymentReminder. SES SMTP credentials are Region-specific and are not the same as regular AWS access keys.
+5. Open the Rails credentials editor:
+
+```bash
+bin/rails credentials:edit
+```
+
+6. Add the dedicated SES SMTP credentials. Do not use regular AWS access keys:
+
+```yaml
+ses:
+  smtp_username: your-ses-smtp-username
+  smtp_password: your-ses-smtp-password
+```
+
+The application reads these values directly from encrypted Rails credentials when it generates a system email. Kamal only supplies `RAILS_MASTER_KEY` to the running containers, as it already does for the application's other encrypted credentials.
+
+Self-hosters can override `MAILER_HOST`, `MAILER_PROTOCOL`, `MAILER_DOMAIN`, `MAILER_FROM_ADDRESS`, `SES_SMTP_ADDRESS`, and `SES_SMTP_PORT`. The default SES endpoint is `email-smtp.us-east-1.amazonaws.com` on port `587` with STARTTLS.
+
 ## Gmail reminder delivery
 
 PaymentReminder can send customer invoice reminders from a Gmail or Google Workspace account owned by each PaymentReminder account. The connected address becomes the reminder `From` address; the sender name can be customized in Settings.

@@ -46,6 +46,12 @@ env:
     DB_HOST: 178.156.170.78
     RAILS_LOG_LEVEL: info
     HOST: https://app.paymentreminderemails.com
+    MAILER_HOST: app.paymentreminderemails.com
+    MAILER_PROTOCOL: https
+    MAILER_DOMAIN: paymentreminderemails.com
+    MAILER_FROM_ADDRESS: PaymentReminder <support@paymentreminderemails.com>
+    SES_SMTP_ADDRESS: email-smtp.us-east-1.amazonaws.com
+    SES_SMTP_PORT: 587
 
     # Log everything from Rails
     # RAILS_LOG_LEVEL: debug

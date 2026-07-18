@@ -31,7 +31,8 @@ module InvoiceSources
       test "invoices passes the requested Xero filter" do
         stub_request(
           :get,
-          "https://api.xero.com/api.xro/2.0/Invoices?where=Type%3D%3D%22ACCREC%22"
+          "https://api.xero.com/api.xro/2.0/Invoices?" \
+            "page=1&pageSize=1000&where=Type%3D%3D%22ACCREC%22"
         ).with(
           headers: {
             "Authorization" => "Bearer access-token",
@@ -49,6 +50,78 @@ module InvoiceSources
         )
 
         assert_equal [], payload.fetch("Invoices")
+      end
+
+      test "invoices combines every Xero page and preserves the filter" do
+        first_page = [ { "InvoiceID" => "invoice-1" }, { "InvoiceID" => "invoice-2" } ]
+        second_page = [ { "InvoiceID" => "invoice-3" } ]
+
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices?" \
+            "page=1&pageSize=1000&where=Type%3D%3D%22ACCREC%22"
+        ).with(
+          headers: {
+            "Authorization" => "Bearer access-token",
+            "xero-tenant-id" => "tenant-123"
+          }
+        ).to_return(
+          status: 200,
+          body: {
+            pagination: { page: 1, pageSize: 1000, pageCount: 2, itemCount: 3 },
+            Invoices: first_page
+          }.to_json
+        )
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices?" \
+            "page=2&pageSize=1000&where=Type%3D%3D%22ACCREC%22"
+        ).with(
+          headers: {
+            "Authorization" => "Bearer access-token",
+            "xero-tenant-id" => "tenant-123"
+          }
+        ).to_return(
+          status: 200,
+          body: {
+            pagination: { page: 2, pageSize: 1000, pageCount: 2, itemCount: 3 },
+            Invoices: second_page
+          }.to_json
+        )
+
+        payload = OauthClient.new.invoices(
+          access_token: "access-token",
+          tenant_id: "tenant-123",
+          where: 'Type=="ACCREC"'
+        )
+
+        assert_equal %w[invoice-1 invoice-2 invoice-3],
+          payload.fetch("Invoices").pluck("InvoiceID")
+      end
+
+      test "invoices falls back to page size when Xero omits pagination metadata" do
+        first_page = Array.new(OauthClient::INVOICES_PAGE_SIZE) do |index|
+          { "InvoiceID" => "invoice-#{index + 1}" }
+        end
+
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices?page=1&pageSize=1000"
+        ).to_return(status: 200, body: { Invoices: first_page }.to_json)
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices?page=2&pageSize=1000"
+        ).to_return(status: 200, body: { Invoices: [] }.to_json)
+
+        payload = OauthClient.new.invoices(
+          access_token: "access-token",
+          tenant_id: "tenant-123"
+        )
+
+        assert_equal OauthClient::INVOICES_PAGE_SIZE, payload.fetch("Invoices").size
+        assert_requested :get,
+          "https://api.xero.com/api.xro/2.0/Invoices?page=2&pageSize=1000",
+          times: 1
       end
 
       test "online_invoice retrieves the customer-facing Xero invoice URL" do

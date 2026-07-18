@@ -8,6 +8,8 @@ module InvoiceSources
     class OauthClient
       class Error < StandardError; end
 
+      INVOICES_PAGE_SIZE = 1_000
+
       attr_reader :config
 
       def initialize(config: Configuration.new)
@@ -52,10 +54,26 @@ module InvoiceSources
       end
 
       def invoices(access_token:, tenant_id:, where: nil)
-        uri = config.invoices_uri.dup
-        uri.query = Rack::Utils.build_query(where: where) if where.present?
+        page = 1
+        invoices = []
+        first_payload = nil
 
-        get_json(uri, access_token: access_token, tenant_id: tenant_id)
+        loop do
+          payload = get_json(
+            invoices_uri(page:, where:),
+            access_token:,
+            tenant_id:
+          )
+          first_payload ||= payload
+          page_invoices = Array(payload.fetch("Invoices", []))
+          invoices.concat(page_invoices)
+
+          break if last_invoices_page?(payload:, page:, page_invoices:)
+
+          page += 1
+        end
+
+        first_payload.except("pagination").merge("Invoices" => invoices)
       end
 
       def invoice(access_token:, tenant_id:, invoice_id:)
@@ -67,6 +85,21 @@ module InvoiceSources
       end
 
       private
+        def invoices_uri(page:, where:)
+          uri = config.invoices_uri.dup
+          query = { page:, pageSize: INVOICES_PAGE_SIZE }
+          query[:where] = where if where.present?
+          uri.query = Rack::Utils.build_query(query)
+          uri
+        end
+
+        def last_invoices_page?(payload:, page:, page_invoices:)
+          page_count = payload.dig("pagination", "pageCount")
+          return page >= page_count.to_i if page_count.present?
+
+          page_invoices.size < INVOICES_PAGE_SIZE
+        end
+
         def post_token(form)
           request = Net::HTTP::Post.new(config.token_uri)
           request.basic_auth(config.client_id, config.client_secret)

@@ -48,6 +48,7 @@ class InvoiceSource < ApplicationRecord
   validates :provider, :status, presence: true
   validates :external_account_id, presence: true
   validates :provider, uniqueness: { scope: :account_id }
+  validates :external_account_id, uniqueness: { scope: :provider }
 
   def self.available_sources_for(account)
     AVAILABLE_SOURCES.map do |source|

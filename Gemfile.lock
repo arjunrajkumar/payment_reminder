@@ -456,6 +456,7 @@ DEPENDENCIES
   geared_pagination
   google-apis-gmail_v1
   importmap-rails
+  jwt (~> 3.2)
   kamal
   letter_opener
   mocha

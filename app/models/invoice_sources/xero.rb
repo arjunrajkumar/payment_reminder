@@ -35,6 +35,30 @@ module InvoiceSources
       source
     end
 
+    def connect_from_authorization!(token_set:, connection:, identity:, authentication_event_id:)
+      source.update!(
+        provider: :xero,
+        status: :active,
+        external_account_id: connection.fetch("tenantId"),
+        external_account_name: connection.fetch("tenantName"),
+        access_token: token_set.fetch("access_token"),
+        refresh_token: token_set.fetch("refresh_token"),
+        expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
+        scopes: token_set["scope"].to_s.split,
+        provider_data: {
+          xero_user_id: identity.subject,
+          email: identity.email,
+          token_type: token_set.fetch("token_type", "Bearer"),
+          connection_id: connection["id"],
+          authentication_event_id: authentication_event_id
+        }.compact,
+        raw_token_data: InvoiceSource.sanitized_token_data(token_set),
+        last_error: nil
+      )
+
+      source
+    end
+
     def sync_invoices!
       ensure_access_token!
       InvoiceSync.new(source, client: oauth_client).sync!

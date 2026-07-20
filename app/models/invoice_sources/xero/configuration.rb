@@ -14,6 +14,12 @@ module InvoiceSources
         offline_access
       ].freeze
 
+      IDENTITY_SCOPES = %w[
+        openid
+        profile
+        email
+      ].freeze
+
       def initialize(host: ENV["HOST"])
         @host = host.presence || DEFAULT_HOST
       end
@@ -38,8 +44,20 @@ module InvoiceSources
         DEFAULT_SCOPES.join(" ")
       end
 
+      def identity_scopes
+        IDENTITY_SCOPES.join(" ")
+      end
+
       def redirect_uri
         "#{host.chomp("/")}/xero/callback"
+      end
+
+      def signup_redirect_uri
+        "#{host.chomp("/")}/signup/xero/callback"
+      end
+
+      def session_redirect_uri
+        "#{host.chomp("/")}/session/xero/callback"
       end
 
       def authorization_uri
@@ -48,6 +66,18 @@ module InvoiceSources
 
       def token_uri
         URI("https://identity.xero.com/connect/token")
+      end
+
+      def issuer
+        "https://identity.xero.com"
+      end
+
+      def resources_audience
+        "https://identity.xero.com/resources"
+      end
+
+      def jwks_uri
+        URI("https://identity.xero.com/.well-known/openid-configuration/jwks")
       end
 
       def connections_uri

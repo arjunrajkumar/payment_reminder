@@ -89,10 +89,12 @@ Sentry creates or updates these cron monitors when the jobs first run. Configure
 
 ## Xero
 
-Create a Xero OAuth 2.0 app and configure its redirect URI to:
+Create a Xero OAuth 2.0 app and register all three redirect URIs:
 
 ```text
 http://localhost:3000/xero/callback
+http://localhost:3000/signup/xero/callback
+http://localhost:3000/session/xero/callback
 ```
 
 Then edit Rails credentials:
@@ -110,7 +112,7 @@ xero:
   webhook_signing_key: your-webhook-signing-key
 ```
 
-OAuth callback URLs are derived from `HOST`, which defaults to `http://localhost:3000` in development. Register `<HOST>/xero/callback` in Xero. For example, start a second local server with:
+OAuth callback URLs are derived from `HOST`, which defaults to `http://localhost:3000` in development. Register `<HOST>/xero/callback`, `<HOST>/signup/xero/callback`, and `<HOST>/session/xero/callback` in Xero. For example, start a second local server with:
 
 ```bash
 HOST=http://localhost:3001 bin/rails server -p 3001 -P tmp/pids/server-3001.pid

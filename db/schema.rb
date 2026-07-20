@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_18_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_20_130000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -63,6 +63,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_100000) do
     t.index ["account_id", "name"], name: "index_customers_on_account_id_and_name"
     t.index ["customer_segment_id"], name: "index_customers_on_customer_segment_id"
     t.index ["invoice_source_id", "external_id"], name: "index_customers_on_invoice_source_id_and_external_id", unique: true
+  end
+
+  create_table "external_identities", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "email_address"
+    t.bigint "identity_id", null: false
+    t.string "provider", null: false
+    t.string "subject", null: false, collation: "utf8mb4_0900_bin"
+    t.datetime "updated_at", null: false
+    t.index ["identity_id", "provider"], name: "index_external_identities_on_identity_id_and_provider", unique: true
+    t.index ["identity_id"], name: "index_external_identities_on_identity_id"
+    t.index ["provider", "subject"], name: "index_external_identities_on_provider_and_subject", unique: true
   end
 
   create_table "identities", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -144,6 +156,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_100000) do
     t.datetime "updated_at", null: false
     t.index ["account_id", "provider"], name: "index_invoice_sources_on_account_id_and_provider", unique: true
     t.index ["account_id"], name: "index_invoice_sources_on_account_id"
+    t.index ["provider", "external_account_id"], name: "index_invoice_sources_on_provider_and_external_account_id", unique: true
     t.index ["provider", "status"], name: "index_invoice_sources_on_provider_and_status"
   end
 
@@ -249,6 +262,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_100000) do
   add_foreign_key "customers", "accounts"
   add_foreign_key "customers", "customer_segments"
   add_foreign_key "customers", "invoice_sources"
+  add_foreign_key "external_identities", "identities", on_delete: :cascade
   add_foreign_key "invoice_reminders", "accounts"
   add_foreign_key "invoice_reminders", "invoice_schedules", on_delete: :nullify
   add_foreign_key "invoice_reminders", "invoices"

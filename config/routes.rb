@@ -3,6 +3,11 @@ Rails.application.routes.draw do
   get "privacy", to: "pages#privacy", as: :privacy
   get "terms", to: "pages#terms", as: :terms
 
+  get "signup/xero", to: "xero/signups#new", as: :new_xero_signup
+  get "signup/xero/callback", to: "xero/signups#create", as: :xero_signup_callback
+  get "session/xero", to: "xero/sessions#new", as: :new_xero_session
+  get "session/xero/callback", to: "xero/sessions#create", as: :xero_session_callback
+
   resources :invoices, only: :index
   resources :customers, only: [] do
     resources :email_addresses,

@@ -10,6 +10,20 @@
       <h1 class="auth-title">Sign up</h1>
       <p class="auth-subtitle">Enter your email to create an account.</p>
 
+      <div class="auth-xero-provider" data-turbo="false">
+        <span
+          data-xero-sso
+          data-href="<%= new_xero_signup_path %>"
+          data-label="Sign up with Xero"
+          data-layout="block"
+          data-size="large"
+          data-theme="light"><%= link_to "Sign up with Xero", new_xero_signup_path, class: "auth-xero-fallback" %></span>
+      </div>
+
+      <div class="auth-divider" role="separator">
+        <span>or continue with email</span>
+      </div>
+
       <%= form_with model: @signup, url: signup_path, scope: "signup", class: "auth-form", data: { turbo: false } do |form| %>
         <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "you@company.com", class: "auth-input" %>
 
@@ -29,3 +43,5 @@
     </p>
   </div>
 </div>
+
+<script src="https://edge.xero.com/platform/sso/xero-sso.js" async defer></script>

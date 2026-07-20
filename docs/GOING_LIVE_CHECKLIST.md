@@ -18,6 +18,8 @@ Use these exact production URLs when a provider asks for them:
 | Terms of service | `https://app.paymentreminderemails.com/terms` |
 | Gmail OAuth callback | `https://app.paymentreminderemails.com/gmail/callback` |
 | Xero OAuth callback | `https://app.paymentreminderemails.com/xero/callback` |
+| Xero signup callback | `https://app.paymentreminderemails.com/signup/xero/callback` |
+| Xero sign-in callback | `https://app.paymentreminderemails.com/session/xero/callback` |
 | Xero webhook | `https://app.paymentreminderemails.com/invoice_sources/webhooks/xero` |
 | Stripe OAuth callback | `https://app.paymentreminderemails.com/stripe/callback` |
 | Stripe Connect webhook | `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe` |
@@ -162,7 +164,7 @@ Google's current requirements are documented in [OAuth app branding](https://sup
 - [ ] Sign in to the [Xero Developer portal](https://developer.xero.com/app/manage).
 - [ ] Create or open the production PaymentReminder OAuth 2.0 app using the authorization-code flow.
 - [ ] Set the application/company URL to `https://www.paymentreminderemails.com`.
-- [ ] Set the OAuth redirect URI to exactly `https://app.paymentreminderemails.com/xero/callback`.
+- [ ] Register `https://app.paymentreminderemails.com/xero/callback`, `https://app.paymentreminderemails.com/signup/xero/callback`, and `https://app.paymentreminderemails.com/session/xero/callback` as OAuth redirect URIs.
 - [ ] Generate a production client secret and add the client ID and secret using `bin/rails credentials:edit`:
 
 ```yaml

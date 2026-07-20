@@ -16,15 +16,17 @@ module InvoiceSources
         @config = config
       end
 
-      def authorization_url(state:, redirect_uri: config.redirect_uri)
+      def authorization_url(state:, redirect_uri: config.redirect_uri, scopes: config.scopes, nonce: nil)
         uri = config.authorization_uri.dup
-        uri.query = Rack::Utils.build_query(
+        query = {
           response_type: "code",
           client_id: config.client_id,
           redirect_uri: redirect_uri,
-          scope: config.scopes,
+          scope: Array(scopes).join(" "),
           state: state
-        )
+        }
+        query[:nonce] = nonce if nonce.present?
+        uri.query = Rack::Utils.build_query(query)
         uri.to_s
       end
 
@@ -43,14 +45,21 @@ module InvoiceSources
         )
       end
 
-      def connections(access_token:)
-        get_json(config.connections_uri, access_token: access_token)
+      def connections(access_token:, auth_event_id: nil)
+        uri = config.connections_uri.dup
+        uri.query = Rack::Utils.build_query(authEventId: auth_event_id) if auth_event_id.present?
+
+        get_json(uri, access_token: access_token)
       end
 
       def userinfo(access_token:)
         get_json(config.userinfo_uri, access_token: access_token)
       rescue Error
         {}
+      end
+
+      def jwks
+        get_json(config.jwks_uri)
       end
 
       def invoices(access_token:, tenant_id:, where: nil)
@@ -109,9 +118,9 @@ module InvoiceSources
           request_json(config.token_uri, request)
         end
 
-        def get_json(uri, access_token:, tenant_id: nil)
+        def get_json(uri, access_token: nil, tenant_id: nil)
           request = Net::HTTP::Get.new(uri)
-          request["Authorization"] = "Bearer #{access_token}"
+          request["Authorization"] = "Bearer #{access_token}" if access_token.present?
           request["Accept"] = "application/json"
           request["xero-tenant-id"] = tenant_id if tenant_id.present?
 
@@ -119,7 +128,13 @@ module InvoiceSources
         end
 
         def request_json(uri, request)
-          response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
+          response = Net::HTTP.start(
+            uri.hostname,
+            uri.port,
+            use_ssl: uri.scheme == "https",
+            open_timeout: 5,
+            read_timeout: 10
+          ) do |http|
             http.request(request)
           end
 

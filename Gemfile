@@ -16,6 +16,7 @@ gem "turbo-rails"
 gem "stimulus-rails"
 gem "geared_pagination"
 gem "google-apis-gmail_v1"
+gem "jwt", "~> 3.2"
 gem "sentry-rails", "~> 6.6"
 gem "stripe", "~> 19.0"
 

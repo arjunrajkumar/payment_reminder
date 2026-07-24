@@ -1,0 +1,65 @@
+<% @page_title = "AI shadow report" %>
+<% @body_class = "app-workspace" %>
+
+<%= render "layouts/shared/application_nav", active: :settings %>
+
+<header class="app-page-header">
+  <div class="app-page-header__content">
+    <%= link_to "← Settings", account_settings_path, class: "app-conversation-back" %>
+    <h1 class="app-page-title">AI shadow evaluation</h1>
+    <p class="app-page-description">Human-reviewed shadow evidence only.</p>
+  </div>
+</header>
+
+<div class="app-section-grid">
+  <section class="app-card">
+    <h2 class="app-card__title">Analysis volume</h2>
+    <pre><%= JSON.pretty_generate(@report.totals) %></pre>
+    <h3>Planner decisions</h3>
+    <pre><%= JSON.pretty_generate(@report.plan_distribution) %></pre>
+    <h3>Intents</h3>
+    <pre><%= JSON.pretty_generate(@report.intent_distribution) %></pre>
+  </section>
+
+  <section class="app-card">
+    <h2 class="app-card__title">Human evaluation</h2>
+    <pre><%= JSON.pretty_generate(@report.evaluation_distribution) %></pre>
+    <p>
+      Accuracy:
+      <%= @report.accuracy ? number_to_percentage(@report.accuracy, precision: 1) : "Not enough reviewed results" %>
+    </p>
+    <p class="app-card__description">
+      Unsure and unreviewed results are excluded from the accuracy denominator.
+    </p>
+    <h3>Customer signal decisions</h3>
+    <pre><%= JSON.pretty_generate(@report.signal_distribution) %></pre>
+  </section>
+</div>
+
+<section class="app-card">
+  <h2 class="app-card__title">Provider and version breakdown</h2>
+  <div class="app-table-wrap">
+    <table class="app-data-table">
+      <thead>
+        <tr>
+          <th>Provider</th>
+          <th>Requested model</th>
+          <th>Returned model</th>
+          <th>Prompt</th>
+          <th>Adapter</th>
+          <th>Schema</th>
+          <th>Planner</th>
+          <th>Results</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @report.version_breakdown.each do |versions, count| %>
+          <tr>
+            <% versions.each do |value| %><td><%= value.presence || "—" %></td><% end %>
+            <td><%= count %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</section>

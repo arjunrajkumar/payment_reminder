@@ -98,4 +98,25 @@ class Conversations::Detail
       )
       .to_a
   end
+
+  def ai_interpretations
+    @ai_interpretations ||= conversation.account.conversation_interpretations
+      .where(
+        conversation_id: Conversations::ReviewWorkUnit
+          .workflow_conversation_ids_for(conversation:)
+      )
+      .includes(
+        :source_message,
+        :customer_ai_guidance_revision,
+        conversation_ai_plan: :conversation_ai_evaluations,
+        conversation_ai_invocations: [],
+        customer_ai_signals: :target_outbound_message
+      )
+      .order(created_at: :desc, id: :desc)
+      .to_a
+  end
+
+  def active_customer_ai_guidance
+    conversation.customer&.customer_ai_profile&.active_guidance_revision
+  end
 end

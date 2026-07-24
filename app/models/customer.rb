@@ -12,8 +12,15 @@ class Customer < ApplicationRecord
     class_name: "CustomerEmailAddress",
     dependent: :destroy,
     inverse_of: :customer
+  has_one :customer_ai_profile,
+    dependent: :restrict_with_exception,
+    inverse_of: :customer
+  has_many :customer_ai_signals,
+    dependent: :restrict_with_exception,
+    inverse_of: :customer
 
   before_validation :assign_initial_customer_segment, on: :create
+  before_destroy :destroy_customer_ai_evidence, prepend: true
   before_destroy :release_optional_workflow_snapshots, prepend: true
 
   validates :external_id, :name, presence: true
@@ -34,6 +41,25 @@ class Customer < ApplicationRecord
   end
 
   private
+    def destroy_customer_ai_evidence
+      ConversationAi::ParentDeletion.destroy_interpretations!(
+        ConversationInterpretation
+          .where(account_id:, invoice_id: invoices.select(:id))
+          .or(ConversationInterpretation.where(account_id:, customer_id: id))
+      )
+
+      profile = customer_ai_profile
+      if profile
+        profile.update_column(:active_guidance_revision_id, nil)
+        profile.guidance_revisions.update_all(source_signal_id: nil)
+        profile.guidance_revisions.delete_all
+      end
+      customer_ai_signals.delete_all
+      profile&.delete
+      association(:customer_ai_profile).reset
+      association(:customer_ai_signals).reset
+    end
+
     def release_optional_workflow_snapshots
       ConversationActionRevision.where(customer_id: id)
         .update_all(customer_id: nil)

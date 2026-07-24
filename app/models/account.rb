@@ -1,4 +1,11 @@
 class Account < ApplicationRecord
+  has_many :conversation_ai_evaluations, dependent: :delete_all, inverse_of: :account
+  has_many :customer_ai_guidance_revisions, dependent: :delete_all, inverse_of: :account
+  has_many :customer_ai_signals, dependent: :delete_all, inverse_of: :account
+  has_many :customer_ai_profiles, dependent: :delete_all, inverse_of: :account
+  has_many :conversation_ai_plans, dependent: :delete_all, inverse_of: :account
+  has_many :conversation_ai_invocations, dependent: :delete_all, inverse_of: :account
+  has_many :conversation_interpretations, dependent: :delete_all, inverse_of: :account
   has_many :invoice_sources, dependent: :destroy
   has_many :stripe_installation_claims,
     class_name: "InvoiceSources::Stripe::InstallationClaim",
@@ -20,6 +27,7 @@ class Account < ApplicationRecord
     inverse_of: :account
   has_many :collection_holds, dependent: :destroy, inverse_of: :account
   has_many :conversation_escalations, dependent: :destroy, inverse_of: :account
+  before_destroy :destroy_ai_evidence_in_dependency_order, prepend: true
   before_destroy :destroy_workflows_before_users, prepend: true
   before_destroy :destroy_conversation_messages_in_dependency_order
   has_many :conversation_messages, dependent: :destroy, inverse_of: :account
@@ -35,6 +43,11 @@ class Account < ApplicationRecord
   before_validation :assign_external_account_id, on: :create
 
   validates :external_account_id, :name, presence: true
+  validates :time_zone, inclusion: { in: ActiveSupport::TimeZone.all.map(&:name) }
+  enum :conversation_ai_mode,
+    { off: "off", shadow: "shadow" },
+    prefix: true,
+    validate: true
   validates :invoice_reminder_from_email,
     format: { with: URI::MailTo::EMAIL_REGEXP },
     allow_blank: true
@@ -73,6 +86,22 @@ class Account < ApplicationRecord
   end
 
   private
+    def destroy_ai_evidence_in_dependency_order
+      customer_ai_profiles.update_all(active_guidance_revision_id: nil)
+      customer_ai_guidance_revisions.update_all(source_signal_id: nil)
+      conversation_ai_evaluations.delete_all
+      customer_ai_guidance_revisions.delete_all
+      customer_ai_signals.delete_all
+      customer_ai_profiles.delete_all
+      conversation_ai_plans.delete_all
+      conversation_ai_invocations.delete_all
+      conversation_interpretations.update_all(
+        supersedes_interpretation_id: nil,
+        customer_ai_guidance_revision_id: nil
+      )
+      conversation_interpretations.delete_all
+    end
+
     def destroy_workflows_before_users
       ConversationActionExecution.where(account_id: id).find_each do |execution|
         execution.send(:destroy_for_parent!)

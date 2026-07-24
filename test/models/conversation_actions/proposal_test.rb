@@ -57,7 +57,7 @@ class ConversationActions::ProposalTest < ActiveSupport::TestCase
       direction: :inbound,
       kind: :customer_email,
       status: :received,
-      received_at: Time.zone.local(2026, 7, 24, 9),
+      received_at: @source_message.received_at + 1.minute,
       matching_status: :unmatched,
       matching_method: :none,
       review_required: true
@@ -69,7 +69,8 @@ class ConversationActions::ProposalTest < ActiveSupport::TestCase
       origin_kind: :user,
       created_by_user: @actor,
       user_facing_summary: "Resolve against the eventual owner.",
-      idempotency_key: "preconstructed-action"
+      idempotency_key: "preconstructed-action",
+      at: source_message.received_at
     )
     invoice_owner = Conversation.for_invoice!(invoice: @invoice)
     owner_message = invoice_owner.conversation_messages.create!(

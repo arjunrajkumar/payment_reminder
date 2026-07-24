@@ -12,7 +12,8 @@ account.
 
 PaymentReminder is working, early-stage software. Invoice sync, outbound reminders, screened Gmail
 ingestion, and an account-user conversation Inbox with human review and threaded manual replies are
-implemented. AI understanding and automated reply handling are not built yet. See the
+implemented. Optional OpenAI or Anthropic analysis can interpret eligible messages in shadow mode
+for human evaluation; it cannot send, approve, or execute anything. See the
 [capability audit](docs/CAPABILITY_AUDIT.md) for the exact current boundary.
 
 ## What it does
@@ -31,6 +32,9 @@ implemented. AI understanding and automated reply handling are not built yet. Se
   labels or read state.
 - Lets account users review or manually match imported conversations and send a verified, threaded
   Gmail reply from the connected account.
+- Lets an account administrator opt into provider-configured AI shadow analysis. Structured
+  interpretations, deterministic shadow plans, human evaluations, and human-approved
+  customer-specific style guidance remain audit evidence only.
 - Tracks payment promises and follow-ups in the domain; platform administrators can operate that
   flow while the customer-facing capture UI is still to be built.
 - Supports multiple accounts and users while keeping every normal application request scoped to
@@ -40,7 +44,7 @@ implemented. AI understanding and automated reply handling are not built yet. Se
 
 Not yet exposed to ordinary users: team invitations and role management, account switching,
 one-off reminders, payment-promise capture, customer and invoice detail pages, search, AI-generated
-replies, or automated reply actions. These boundaries are documented as latent or not built—not
+reply sending, AI approval mode, or automated reply actions. These boundaries are documented as latent or not built—not
 presented as shipped features.
 
 ## Run it locally
@@ -170,6 +174,7 @@ product:
 | Stripe App | Read invoices; consume connected-account events for supported public Apps | Stripe-backed receivables |
 | Gmail / Google Workspace | Send reminders and screen relevant mailbox activity with `gmail.send` and `gmail.readonly` | Customer reminders and screened Gmail import |
 | SMTP / Amazon SES | Send installation-wide application email | Email-code authentication and notifications |
+| OpenAI or Anthropic | Strict structured interpretation in opt-in shadow mode | Optional AI evaluation |
 | Sentry | Report application failures and recurring-job check-ins | Optional monitoring |
 
 Create credentials owned by your fork, set the public host, and then register matching callback

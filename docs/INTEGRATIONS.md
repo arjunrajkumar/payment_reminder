@@ -309,7 +309,9 @@ Relevant automatic replies, spam, unmatched, ambiguous, and malformed messages r
 human review in the account-user Inbox. Users can review or manually match a Gmail-thread work unit
 and send a verified threaded reply from an invoice conversation. PaymentReminder does not change
 Gmail labels or read state, and does not store raw MIME or attachment bodies. Gmail push
-notifications, AI processing, and automatic actions are not implemented.
+notifications and automatic actions are not implemented. When an account administrator separately
+enables AI shadow mode, eligible matched inbound content may be sent to the configured OpenAI or
+Anthropic provider as described below.
 
 Invoice collection holds are enforced independently of Gmail. The scheduler, queued-job preflight,
 locked reservation, and final automated-delivery handoff all recheck active holds. A due scheduled
@@ -343,8 +345,34 @@ Dispute execution commits an invoice collection hold and human escalation before
 acknowledgement delivery begins. The hold is released only through the existing explicit human
 control.
 
-AI classification, prompt/model calls, shadow mode, automatic execution allowlists,
-customer-specific learning, and daily summaries are not implemented.
+### OpenAI and Anthropic shadow interpretation
+
+OpenAI and Anthropic are optional server-side integrations. Configure one or both using the API-key
+and explicit model variables in [Configuration](CONFIGURATION.md). An account administrator must
+then select an available provider and enable shadow mode; configuration alone does not analyze
+messages, and enabling does not backfill historical mail.
+
+For each eligible, durably matched inbound message, PaymentReminder extracts a bounded authored
+portion, excludes quoted history from executable evidence, and sends a labelled untrusted context
+snapshot. The snapshot can include subject and authored body, bounded trusted delivery headers,
+small recent-message excerpts from the same account review work unit, account time zone,
+customer/invoice identifiers, and an active human-approved customer style-guidance revision.
+Attachments, raw MIME, OAuth tokens, API keys, raw accounting payloads, and other accounts' data
+are excluded.
+
+The OpenAI Responses adapter and Anthropic Messages adapter each use the provider's native strict
+JSON-schema output mode, one HTTP attempt per application attempt, no tools, and no hidden SDK
+retry loop. PaymentReminder validates the normalized result again in Rails before a deterministic
+shadow planner maps it to the existing action catalog. Sanitized request/response evidence,
+provider/model versions, request IDs, usage, latency, and failure classifications are retained
+without authorization secrets.
+
+Provider output is evaluation evidence only. It creates no `ConversationAction`, sends no email,
+changes no invoice or recipient, and does not affect reminders, holds, disputes, promises, or
+escalations. A person may record correct/incorrect/unsure feedback. AI-proposed customer
+communication preferences remain untrusted signals until a person edits and approves a bounded
+style-only guidance revision. Approval mode, automatic execution, cross-customer learning,
+attachments/vision, and daily summaries are not implemented.
 
 ### Create the Google OAuth application
 

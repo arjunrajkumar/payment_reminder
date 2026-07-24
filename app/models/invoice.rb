@@ -27,6 +27,7 @@ class Invoice < ApplicationRecord
     -> { order(placed_at: :desc, id: :desc) },
     dependent: :destroy,
     inverse_of: :invoice
+  before_destroy :destroy_ai_evidence_for_parent, prepend: true
   before_destroy :destroy_conversation_messages_in_dependency_order
   has_many :conversation_messages,
     -> { order(created_at: :desc, id: :desc) },
@@ -124,6 +125,12 @@ class Invoice < ApplicationRecord
   end
 
   private
+    def destroy_ai_evidence_for_parent
+      ConversationAi::ParentDeletion.destroy_interpretations!(
+        ConversationInterpretation.where(invoice_id: id)
+      )
+    end
+
     def destroy_conversation_messages_in_dependency_order
       ConversationMessage.destroy_in_dependency_order!(conversation_messages)
     end

@@ -1,0 +1,279 @@
+<section class="app-card app-conversation-panel" aria-label="AI shadow interpretations">
+  <h2 class="app-card__title">AI shadow</h2>
+  <p class="app-card__description">
+    Shadow only — nothing was sent or changed.
+  </p>
+
+  <% if interpretations.empty? %>
+    <p class="app-card__description">No AI shadow analysis is available.</p>
+  <% else %>
+    <% interpretations.each do |interpretation| %>
+      <% plan = interpretation.conversation_ai_plan %>
+      <article class="app-ai-analysis" data-testid="ai-interpretation-<%= interpretation.id %>">
+        <div class="app-row">
+          <div class="app-row__text">
+            <strong><%= interpretation.summary.presence || "AI analysis" %></strong>
+            <div class="app-row__note">
+              <%= interpretation.status.humanize %>
+              <% if interpretation.completed_at %>
+                · <%= time_ago_in_words(interpretation.completed_at) %> ago
+              <% end %>
+            </div>
+          </div>
+          <span class="app-pill <%= interpretation.status_succeeded? ? "app-pill--green" : "app-pill--slate" %>">
+            Shadow
+          </span>
+        </div>
+
+        <% if interpretation.status_succeeded? || interpretation.status_skipped? || interpretation.status_superseded? %>
+          <dl class="app-ai-facts">
+            <dt>Understood</dt>
+            <dd><%= interpretation.message_kind.humanize %></dd>
+            <dt>Language</dt>
+            <dd><%= interpretation.language %></dd>
+            <dt>Confidence</dt>
+            <dd><%= number_to_percentage(interpretation.overall_confidence_bps.to_i / 100.0, precision: 0) %></dd>
+            <dt>Rationale</dt>
+            <dd><%= interpretation.concise_rationale %></dd>
+            <% if plan %>
+              <dt>Planner decision</dt>
+              <dd><%= plan.decision.humanize %></dd>
+              <% if plan.decision_propose_action? %>
+                <dt>Proposed action</dt>
+                <dd><%= plan.proposed_action_type.humanize %></dd>
+                <dt>Arguments</dt>
+                <dd><pre><%= JSON.pretty_generate(plan.arguments) %></pre></dd>
+              <% end %>
+            <% end %>
+          </dl>
+
+          <% Array(interpretation.structured_result["intents"]).each do |intent| %>
+            <details>
+              <summary>
+                <%= intent["type"].humanize %>
+                (<%= number_to_percentage(intent["confidence_bps"].to_i / 100.0, precision: 0) %>)
+              </summary>
+              <% intent["evidence"].each do |evidence| %>
+                <blockquote>
+                  “<%= evidence["quote"] %>”
+                  <small><%= evidence["field"].humanize %> · <%= evidence["purpose"] %></small>
+                </blockquote>
+              <% end %>
+              <% values = intent["values"].select { |_key, value| value.present? } %>
+              <% if values.any? %><pre><%= JSON.pretty_generate(values) %></pre><% end %>
+            </details>
+          <% end %>
+
+          <% outline = Array(interpretation.structured_result.dig("proposed_reply", "outline")) %>
+          <% if outline.any? %>
+            <details>
+              <summary>Proposed reply outline (audit evidence only)</summary>
+              <ul><% outline.each do |line| %><li><%= line %></li><% end %></ul>
+            </details>
+          <% end %>
+
+          <% if interpretation.customer_ai_guidance_revision %>
+            <p class="app-card__description">
+              Used approved customer guidance revision
+              <%= interpretation.customer_ai_guidance_revision.revision_number %>.
+            </p>
+          <% end %>
+
+          <% if plan && !interpretation.status_superseded? %>
+            <% evaluation_key = SecureRandom.uuid %>
+            <%= form_with url: conversation_ai_evaluations_path(conversation),
+              class: "app-ai-evaluation-form" do %>
+              <%= hidden_field_tag "conversation_interpretation_id", interpretation.id %>
+              <%= hidden_field_tag "ai_evaluation[token]",
+                ConversationAi::EvaluationSnapshot.token_for(
+                  interpretation:,
+                  idempotency_key: evaluation_key
+                ) %>
+              <%= hidden_field_tag "ai_evaluation[idempotency_key]", evaluation_key %>
+              <%= select_tag "ai_evaluation[verdict]",
+                options_for_select([
+                  [ "Correct", "correct" ],
+                  [ "Incorrect", "incorrect" ],
+                  [ "Unsure", "unsure" ]
+                ]),
+                class: "app-select",
+                aria: { label: "AI evaluation verdict" } %>
+              <%= text_field_tag "ai_evaluation[note]",
+                nil,
+                maxlength: 2_000,
+                placeholder: "Optional note",
+                class: "auth-input" %>
+              <%= submit_tag "Record feedback", class: "app-secondary-button" %>
+            <% end %>
+          <% end %>
+        <% elsif interpretation.status_failed? %>
+          <p class="app-row__note app-row__note--warning">
+            Analysis failed: <%= interpretation.failure_category.to_s.humanize %>.
+            The conversation remains available for human handling.
+          </p>
+        <% end %>
+
+        <% interpretation.customer_ai_signals.each do |signal| %>
+          <details>
+            <summary>Customer feedback signal: <%= signal.signal_type.humanize %></summary>
+            <p><%= signal.evidence["quote"] %></p>
+            <% if signal.status_proposed? %>
+              <% guidance_key = SecureRandom.uuid %>
+              <% guidance_token = CustomerAi::GuidanceSnapshot.token_for(
+                signal:,
+                idempotency_key: guidance_key
+              ) %>
+              <%= form_with url: conversation_customer_ai_signal_approval_path(
+                conversation,
+                signal
+              ), class: "app-ai-guidance-form" do %>
+                <%= hidden_field_tag "customer_ai_signal_approval[token]", guidance_token %>
+                <%= hidden_field_tag "customer_ai_signal_approval[idempotency_key]", guidance_key %>
+                <%= label_tag "customer_ai_signal_approval_summary_#{signal.id}",
+                  "Guidance summary",
+                  class: "app-row__label" %>
+                <%= text_field_tag "customer_ai_signal_approval[summary]",
+                  signal.signal_type.humanize,
+                  id: "customer_ai_signal_approval_summary_#{signal.id}",
+                  maxlength: 500,
+                  class: "auth-input" %>
+                <% CustomerAiGuidanceRevision::ALLOWED_GUIDANCE_KEYS.each do |key| %>
+                  <% value = signal.proposed_guidance[key] %>
+                  <%= label_tag "customer_ai_signal_approval_#{key}_#{signal.id}",
+                    key.humanize,
+                    class: "app-row__label" %>
+                  <%= text_field_tag "customer_ai_signal_approval[structured_guidance][#{key}]",
+                    key == "phrases_to_avoid" ? Array(value).join(", ") : value,
+                    id: "customer_ai_signal_approval_#{key}_#{signal.id}",
+                    maxlength: key == "communication_notes" ? 500 : 1_000,
+                    class: "auth-input" %>
+                <% end %>
+                <%= label_tag "customer_ai_signal_approval_note_#{signal.id}",
+                  "Decision note",
+                  class: "app-row__label" %>
+                <%= text_field_tag "customer_ai_signal_approval[note]",
+                  nil,
+                  id: "customer_ai_signal_approval_note_#{signal.id}",
+                  maxlength: 2_000,
+                  class: "auth-input" %>
+                <%= submit_tag "Approve guidance", class: "app-secondary-button" %>
+              <% end %>
+              <%= form_with url: conversation_customer_ai_signal_rejection_path(
+                conversation,
+                signal
+              ) do %>
+                <%= hidden_field_tag "customer_ai_signal_rejection[token]", guidance_token %>
+                <%= hidden_field_tag "customer_ai_signal_rejection[idempotency_key]", guidance_key %>
+                <%= hidden_field_tag "customer_ai_signal_rejection[note]", "Rejected by user" %>
+                <%= submit_tag "Reject suggestion", class: "app-secondary-button" %>
+              <% end %>
+            <% end %>
+          </details>
+        <% end %>
+
+        <details>
+          <summary>Versions and technical details</summary>
+          <dl class="app-ai-facts">
+            <dt>Provider / model</dt>
+            <dd><%= interpretation.provider %> / <%= interpretation.requested_model %></dd>
+            <dt>Prompt / adapter</dt>
+            <dd><%= interpretation.semantic_prompt_version %> / <%= interpretation.provider_adapter_version %></dd>
+            <dt>Schema / planner</dt>
+            <dd><%= interpretation.result_schema_version %> / <%= interpretation.planner_version %></dd>
+          </dl>
+          <% if Current.user.admin? %>
+            <% interpretation.conversation_ai_invocations.each do |invocation| %>
+              <details data-testid="ai-provider-audit">
+                <summary>Attempt <%= invocation.attempt_number %>: <%= invocation.status %></summary>
+                <dl class="app-ai-facts">
+                  <dt>Provider</dt>
+                  <dd><%= invocation.provider %></dd>
+                  <dt>Requested / returned model</dt>
+                  <dd>
+                    <%= invocation.requested_model %> /
+                    <%= invocation.returned_model.presence || "Unavailable" %>
+                  </dd>
+                  <dt>Endpoint / API</dt>
+                  <dd><%= invocation.endpoint %> / <%= invocation.api_version %></dd>
+                  <dt>Adapter</dt>
+                  <dd><%= invocation.provider_adapter_version %></dd>
+                  <dt>Provider request ID</dt>
+                  <dd><%= invocation.provider_request_id.presence || "Unavailable" %></dd>
+                  <dt>Token usage</dt>
+                  <dd>
+                    Input <%= invocation.input_tokens.presence || "—" %>,
+                    cached <%= invocation.cached_input_tokens.presence || "—" %>,
+                    output <%= invocation.output_tokens.presence || "—" %>,
+                    total <%= invocation.total_tokens.presence || "—" %>
+                  </dd>
+                  <dt>Latency</dt>
+                  <dd><%= invocation.latency_ms.presence || "Unavailable" %> ms</dd>
+                  <dt>Failure / retry</dt>
+                  <dd>
+                    <%= invocation.failure_category.presence || "None" %>
+                    <% if invocation.retry_after_seconds %>
+                      · retry after <%= invocation.retry_after_seconds %> seconds
+                    <% end %>
+                    <% if invocation.possible_duplicate_cost? %>
+                      · possible duplicate provider cost
+                    <% end %>
+                  </dd>
+                </dl>
+                <pre><%= JSON.pretty_generate(invocation.sanitized_request) %></pre>
+                <pre><%= JSON.pretty_generate(invocation.sanitized_response) %></pre>
+              </details>
+            <% end %>
+          <% end %>
+        </details>
+
+        <% if Current.account.conversation_ai_mode_shadow? %>
+          <%= button_to "Reanalyze this message",
+            conversation_ai_analysis_path(conversation),
+            params: {
+              ai_analysis: {
+                source_message_id: interpretation.source_message_id,
+                work_unit_token: work_unit_token
+              }
+            },
+            class: "app-secondary-button" %>
+        <% end %>
+      </article>
+    <% end %>
+  <% end %>
+
+  <% if active_guidance %>
+    <p class="app-card__description">
+      Active customer guidance revision <%= active_guidance.revision_number %>:
+      <%= active_guidance.summary %>
+    </p>
+  <% end %>
+
+  <% if conversation.customer %>
+    <details>
+      <summary>Add a human-authored customer guidance revision</summary>
+      <%= form_with url: customer_ai_guidance_revisions_path(conversation.customer),
+        class: "app-ai-guidance-form" do %>
+        <%= hidden_field_tag "ai_guidance_revision[idempotency_key]", SecureRandom.uuid %>
+        <%= label_tag "ai_guidance_revision_summary",
+          "Guidance summary",
+          class: "app-row__label" %>
+        <%= text_field_tag "ai_guidance_revision[summary]",
+          nil,
+          maxlength: 500,
+          required: true,
+          class: "auth-input" %>
+        <% CustomerAiGuidanceRevision::ALLOWED_GUIDANCE_KEYS.each do |key| %>
+          <%= label_tag "ai_guidance_revision_#{key}",
+            key.humanize,
+            class: "app-row__label" %>
+          <%= text_field_tag "ai_guidance_revision[structured_guidance][#{key}]",
+            nil,
+            id: "ai_guidance_revision_#{key}",
+            maxlength: key == "communication_notes" ? 500 : 1_000,
+            class: "auth-input" %>
+        <% end %>
+        <%= submit_tag "Activate guidance revision", class: "app-secondary-button" %>
+      <% end %>
+    </details>
+  <% end %>
+</section>

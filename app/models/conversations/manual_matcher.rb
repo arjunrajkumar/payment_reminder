@@ -43,7 +43,7 @@ class Conversations::ManualMatcher
 
   def call
     validate_records!
-    EmailConnection::MailboxThreadLock.synchronize(
+    result = EmailConnection::MailboxThreadLock.synchronize(
       account:,
       provider_account_id: reviewed_message.provider_account_id,
       provider_thread_id: reviewed_message.provider_thread_id
@@ -63,6 +63,8 @@ class Conversations::ManualMatcher
         end
       end
     end
+    ConversationAi::EligibilityHook.for_conversation(result)
+    result
   rescue EmailConnection::MailboxThreadLock::Unavailable
     raise Error, "This Gmail thread is being updated. Please try again."
   rescue Conversations::ReviewWorkUnit::SplitInvoiceWorkUnit

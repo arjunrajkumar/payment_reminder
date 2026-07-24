@@ -238,6 +238,82 @@
     <% end %>
   </section>
 
+  <section class="app-ai-settings-card" data-testid="conversation-ai-settings">
+    <h2 class="app-card__title">AI shadow analysis</h2>
+    <p class="app-card__description">
+      AI is off by default. Shadow mode interprets eligible inbound customer emails
+      for evaluation, but never sends a message or changes a business record.
+    </p>
+
+    <div class="app-list">
+      <div class="app-row">
+        <div class="app-row__text">
+          <div class="app-row__label">Status</div>
+          <div class="app-row__note">
+            <%= @conversation_ai_health.provider.presence || "No provider selected" %>
+            <% if @conversation_ai_health.model %>
+              · <%= @conversation_ai_health.model %>
+            <% end %>
+            · <%= @conversation_ai_health.available ? "Configured" : "Unconfigured" %>
+          </div>
+        </div>
+        <span class="app-pill <%= @conversation_ai_health.available ? "app-pill--green" : "app-pill--slate" %>">
+          <%= @conversation_ai_health.mode.humanize %>
+        </span>
+      </div>
+      <div class="app-row">
+        <div class="app-row__text">
+          <div class="app-row__label">Health</div>
+          <div class="app-row__note">
+            <%= @conversation_ai_health.pending_count %> pending,
+            <%= @conversation_ai_health.due_count %> due,
+            <%= @conversation_ai_health.stale_count %> stale.
+            <% if @conversation_ai_health.last_success_at %>
+              Last success:
+              <%= time_ago_in_words(@conversation_ai_health.last_success_at) %> ago.
+            <% end %>
+            <% if @conversation_ai_health.last_failure_at %>
+              Last failure:
+              <%= @conversation_ai_health.last_failure_category.to_s.humanize %>,
+              <%= time_ago_in_words(@conversation_ai_health.last_failure_at) %> ago.
+            <% end %>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <% if Current.user.admin? %>
+      <%= form_with url: account_conversation_ai_setting_path,
+        method: :patch,
+        class: "app-reminder-settings-form" do %>
+        <%= label_tag "conversation_ai_setting_mode", "AI mode", class: "app-row__label" %>
+        <%= select_tag "conversation_ai_setting[mode]",
+          options_for_select([
+            [ "Off", "off" ],
+            [ "Shadow", "shadow" ]
+          ], @account.conversation_ai_mode),
+          class: "app-select" %>
+        <%= label_tag "conversation_ai_setting_provider", "Provider", class: "app-row__label" %>
+        <%= select_tag "conversation_ai_setting[provider]",
+          options_for_select(
+            @conversation_ai_health.configured_providers.map do |provider|
+              [ provider.titleize, provider ]
+            end,
+            @account.conversation_ai_provider
+          ),
+          include_blank: "No configured provider",
+          class: "app-select" %>
+        <%= submit_tag "Save AI settings", class: "app-primary-button" %>
+      <% end %>
+    <% else %>
+      <p class="app-card__description">Only an account administrator can change AI settings.</p>
+    <% end %>
+
+    <%= link_to "Open shadow evaluation report",
+      account_conversation_ai_report_path,
+      class: "app-secondary-button" %>
+  </section>
+
 </div>
 
 <section class="app-table-card app-segment-rules-card">

@@ -38,7 +38,19 @@ class ConversationEvent < ApplicationRecord
     collection_hold_released: "collection_hold_released",
     conversation_escalated: "conversation_escalated",
     conversation_escalation_resolved: "conversation_escalation_resolved",
-    conversation_escalation_reopened: "conversation_escalation_reopened"
+    conversation_escalation_reopened: "conversation_escalation_reopened",
+    conversation_ai_analysis_queued: "conversation_ai_analysis_queued",
+    conversation_ai_analysis_started: "conversation_ai_analysis_started",
+    conversation_ai_analysis_completed: "conversation_ai_analysis_completed",
+    conversation_ai_analysis_failed: "conversation_ai_analysis_failed",
+    conversation_ai_analysis_skipped: "conversation_ai_analysis_skipped",
+    conversation_ai_analysis_superseded: "conversation_ai_analysis_superseded",
+    conversation_ai_plan_created: "conversation_ai_plan_created",
+    conversation_ai_evaluation_recorded: "conversation_ai_evaluation_recorded",
+    customer_ai_signal_proposed: "customer_ai_signal_proposed",
+    customer_ai_signal_approved: "customer_ai_signal_approved",
+    customer_ai_signal_rejected: "customer_ai_signal_rejected",
+    customer_ai_guidance_activated: "customer_ai_guidance_activated"
   }.freeze
 
   belongs_to :account, inverse_of: :conversation_events
@@ -58,6 +70,7 @@ class ConversationEvent < ApplicationRecord
 
   validates :metadata, exclusion: { in: [ nil ], message: "can't be blank" }
   validates :execution_event_key, uniqueness: true, allow_nil: true
+  validates :ai_event_key, uniqueness: true, allow_nil: true
   validate :account_matches_conversation
   validate :conversation_message_matches_event
   validate :actor_user_matches_event
@@ -131,6 +144,33 @@ class ConversationEvent < ApplicationRecord
         )
         event.created_at = created_at
       end
+    end
+
+    def record_ai_once!(
+      interpretation:,
+      role:,
+      kind:,
+      actor_kind: :system,
+      actor_user: nil,
+      conversation_message: nil,
+      metadata: {},
+      created_at: Time.current
+    )
+      key = [ "ai", interpretation.id, role.to_s ].join(":")
+      find_by(ai_event_key: key) || create!(ai_event_key: key) do |event|
+        event.conversation = interpretation.conversation.canonical
+        event.conversation_message = conversation_message
+        event.kind = kind
+        event.actor_kind = actor_kind
+        event.actor_user = actor_user
+        event.metadata = metadata.merge(
+          "conversation_interpretation_id" => interpretation.id,
+          "event_role" => role.to_s
+        )
+        event.created_at = created_at
+      end
+    rescue ActiveRecord::RecordNotUnique
+      find_by!(ai_event_key: key)
     end
   end
 

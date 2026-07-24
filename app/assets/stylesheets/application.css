@@ -293,6 +293,44 @@ body.public {
   margin-top: 0;
 }
 
+.app-ai-analysis {
+  border-top: 1px solid var(--color-divider);
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.app-ai-facts {
+  display: grid;
+  gap: 0.35rem 1rem;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  margin: 0;
+}
+
+.app-ai-facts dt {
+  color: var(--color-text-muted);
+  font-weight: 700;
+}
+
+.app-ai-facts dd {
+  margin: 0;
+  min-width: 0;
+}
+
+.app-ai-analysis pre {
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.app-ai-evaluation-form {
+  align-items: end;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(8rem, auto) 1fr auto;
+}
+
 .auth-input {
   width: 100%;
   appearance: none;
@@ -592,7 +630,8 @@ body.public {
   background: #f8fafc;
 }
 
-.app-card {
+.app-card,
+.app-ai-settings-card {
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
   padding: 1.5rem;

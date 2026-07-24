@@ -239,30 +239,30 @@ execution state without erasing the earlier uncertainty audit. Delivery-failure 
 is separate from the command's dispute escalation, so repair never releases the dispute hold.
 Decision and reply actor snapshots retain historical identity after a user is removed.
 
-AI classification, prompt/model calls, shadow-mode planning, automatic execution allowlists,
-customer-specific learning, and daily summaries are **not** implemented.
+### AI shadow interpretation and customer guidance
 
-### Future customer-specific AI learning boundary
-
-The action/revision/decision, hold, escalation, message, and event records preserve evidence for a
-future AI evaluation workflow, but PaymentReminder does not yet learn or change behavior per
-customer.
-
-A future PR 5/5B design must use bounded, customer-scoped strategy-insight candidates rather than
-one unbounded free-text memory field. Every candidate must cite immutable evidence IDs such as
-customer messages, action revisions, human edits/decisions, executed actions, and later outcomes;
-record confidence, model version, prompt version, creation time, and provenance; and follow a
-candidate → human-approved/rejected → retired/superseded lifecycle. AI must never silently activate,
-edit, or delete durable guidance.
-
-Only active, human-approved insight versions may later enter planning context, and every AI proposal
-must record the exact insight IDs and versions it read. Changed context before approval or execution
-must require re-planning or renewed approval. Explicit customer statements and human corrections
-outweigh inferred outcomes; payment after an email is correlation, not proof that the wording caused
-payment. Planning context must remain bounded. Learned tone, wording, or timing can never override
-provider invoice facts, disputes, collection holds, cooldowns, recipient validation, or
-deterministic execution policy. Customer identity remains provider-scoped, so insights must not be
-merged across `Customer` records without a separate identity-merging feature.
+- **Available, off by default:** an administrator can select a configured OpenAI or Anthropic
+  provider and enable shadow mode. Historical messages are not automatically backfilled.
+- **Available:** eligible matched inbound messages receive one provider-neutral, strictly
+  structured interpretation. Authored content is bounded; quoted history, headers, and approved
+  customer guidance are labelled untrusted. The providers receive no tools.
+- **Available:** Rails validates evidence and extracted values, then a deterministic shadow planner
+  maps the result to the existing action catalog as `propose_action`, `human_review`, or
+  `no_action`. Confidence never grants execution permission.
+- **Available:** the Inbox shows interpretation evidence, extracted values, provider/model and
+  pipeline versions, supersession, human correct/incorrect/unsure evaluation, and—only to account
+  administrators—bounded technical request diagnostics. The account report separates provider,
+  model, prompt, adapter, schema, and planner versions.
+- **Available with human governance:** AI may record a proposed customer-feedback signal only when
+  it is anchored to an exact earlier outbound message. A person can reject it or edit and approve a
+  bounded style-only guidance revision. Only the active approved revision enters later context,
+  and every interpretation records the exact revision and digest it used.
+- **Safety boundary:** shadow analysis never creates a `ConversationAction`, approves or executes a
+  command, sends email, changes invoice facts or recipients, places a hold, records a promise, or
+  alters reminder policy. Customer guidance cannot override authorization, facts, cooldowns,
+  disputes, holds, escalation, recipient validation, or delivery safety.
+- **Not implemented:** AI approval mode, automatic execution or sending, automatic profile
+  synthesis, cross-customer/account learning, attachments/vision, and daily summaries.
 
 `ConversationMessage` supports these kinds:
 
@@ -395,11 +395,14 @@ organization access, security policies, and consent screens remain authoritative
 | Invoice-reminder scheduler | Every hour | Enqueue stages due on the current date |
 | Payment-promise scheduler | Hourly at minute 20 | Enqueue follow-ups for due active promises |
 | Pending-message reconciler | Hourly at minute 40 | Fail deliveries left pending for more than 2 hours |
+| Reminder-notification reconciler | Every 15 minutes | Recover pending notification delivery |
+| Conversation-action reconciler | Every 15 minutes | Recover deterministic action and reply scheduling |
 | Gmail inbound poll | Every 15 minutes | Enqueue mailbox History synchronization |
 | Pending Gmail receipt processor | Every 15 minutes | Recover stalled receipts and enqueue due processing |
+| AI shadow reconciler | Every 15 minutes | Repair bounded scheduling, stale claims, missing eligible analyses, and disabled-mode work |
 
-All six jobs have Sentry cron-monitor check-ins when Sentry is configured. `/up` checks only the web
-process; it does not prove that queue workers or recurring jobs are healthy.
+`/up` checks only the web process; it does not prove that queue workers or recurring jobs are
+healthy. Monitor the recurring schedules and Solid Queue backlog independently.
 
 ### Provider dependencies
 
@@ -455,9 +458,8 @@ process; it does not prove that queue workers or recurring jobs are healthy.
 These items were found during review but were not silently changed because they require product,
 privacy, security, or deployment decisions:
 
-- There is no AI extraction, automated answer generation, or AI-response approval workflow. The
-  ordinary-user accounts-receivable Inbox supports deterministic human review, manual matching,
-  and user-authored threaded replies.
+- AI is limited to opt-in shadow interpretation and human-reviewed style guidance. There is no AI
+  approval mode, generated-reply sending, or automatic execution workflow.
 - Provider synchronization intentionally preserves an existing customer email when a later provider
   payload has a blank email. This may retain a stale recipient, but existing tests define the
   behavior and it needs an explicit product decision.

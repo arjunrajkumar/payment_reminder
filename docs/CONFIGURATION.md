@@ -111,11 +111,38 @@ These are the production settings a self-hoster is most likely to change:
 | `RAILS_MAX_THREADS` | Web and database pool sizing input | App-specific defaults |
 | `WEB_CONCURRENCY` | Puma worker count | `1` |
 | `JOB_CONCURRENCY` | Solid Queue process count | `1` |
+| `CONVERSATION_AI_PROVIDER` | Optional installation default AI provider (`openai` or `anthropic`); an account administrator still chooses and enables shadow mode | Empty |
+| `OPENAI_API_KEY` | OpenAI server API key used only when OpenAI is selected | Required for configured OpenAI shadow analysis |
+| `OPENAI_MODEL` | Explicit OpenAI model identifier; no “latest” model is hard-coded | Required with `OPENAI_API_KEY` |
+| `ANTHROPIC_API_KEY` | Anthropic server API key used only when Anthropic is selected | Required for configured Anthropic shadow analysis |
+| `ANTHROPIC_MODEL` | Explicit Anthropic model identifier; no “latest” model is hard-coded | Required with `ANTHROPIC_API_KEY` |
 
 `DATABASE_URL` is the simplest development/test override for the narrow local defaults in
 `config/database.yml`. The production configuration uses four named databases, so deployment
 operators normally configure `DB_HOST` and the checked-in database role or adapt
 `config/database.yml` deliberately instead of relying on one `DATABASE_URL`.
+
+## AI shadow analysis
+
+AI is off for every account by default. To make a provider available, set both its API key and
+explicit model variable, restart the web and job processes, and then let an account administrator
+choose that provider and enable **Shadow** in Settings. Missing keys or models fail closed.
+
+Shadow analysis sends a bounded snapshot of one eligible inbound message to the selected provider:
+the newly authored text and subject, limited delivery headers, a small recent-message excerpt,
+bounded customer/invoice identity context, the account time zone, and the active human-approved
+customer style-guidance revision when one exists. It does not send OAuth tokens, provider API keys,
+raw MIME, attachments, account-user data, hidden BCC lists, or raw accounting-provider payloads.
+
+Both adapters request strict JSON-schema output and expose no tools. API keys remain process
+secrets and are never written to product records. PaymentReminder retains a bounded, sanitized
+request envelope, structured response, usage, provider request ID, latency, and failure category
+for audit and evaluation; authorization headers are excluded.
+
+This release is shadow only. It cannot send a message, create or approve a deterministic action,
+alter an invoice, place a hold, add a recipient, or otherwise execute provider output. Customer
+style guidance becomes active only after a person reviews and approves or authors a bounded
+revision. Approval mode, automatic execution, and daily summaries are not implemented.
 
 ## Public host and callback URLs
 
@@ -147,9 +174,9 @@ must match.
 
 ## What belongs where
 
-- Store OAuth client secrets, webhook signing keys, SMTP credentials, Stripe secret keys, Sentry
-  DSNs, and the platform-admin allowlist in encrypted credentials or the deployment's secret
-  manager.
+- Store OAuth client secrets, webhook signing keys, SMTP credentials, Stripe secret keys, AI API
+  keys, Sentry DSNs, and the platform-admin allowlist in encrypted credentials or the deployment's
+  secret manager.
 - Store public origins, ports, log levels, concurrency, and public mail identity in environment
   variables.
 - Never put provider secrets in `stripe-app/`, client-side JavaScript, Docker images, issues, logs,

@@ -32,6 +32,12 @@
   conversation:,
   detail: @detail %>
 
+<%= render "conversations/ai_interpretations",
+  conversation:,
+  interpretations: @detail.ai_interpretations,
+  active_guidance: @detail.active_customer_ai_guidance,
+  work_unit_token: %>
+
 <%= render "conversations/actions",
   conversation:,
   actions: @detail.actions %>

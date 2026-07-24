@@ -37,3 +37,6 @@ production:
   process_pending_gmail_receipts:
     class: EmailMessageReceipts::ProcessPendingJob
     schedule: every 15 minutes
+  reconcile_conversation_ai:
+    class: ConversationAi::ReconcileJob
+    schedule: every 15 minutes at second 45

@@ -129,6 +129,20 @@ class ConversationMessage < ApplicationRecord
     foreign_key: :source_message_id,
     dependent: :nullify,
     inverse_of: :source_message
+  has_many :conversation_interpretations,
+    foreign_key: :source_message_id,
+    dependent: :restrict_with_exception,
+    inverse_of: :source_message
+  has_many :source_customer_ai_signals,
+    class_name: "CustomerAiSignal",
+    foreign_key: :source_message_id,
+    dependent: :restrict_with_exception,
+    inverse_of: :source_message
+  has_many :target_customer_ai_signals,
+    class_name: "CustomerAiSignal",
+    foreign_key: :target_outbound_message_id,
+    dependent: :restrict_with_exception,
+    inverse_of: :target_outbound_message
 
   attribute :review_outcome, :string
 

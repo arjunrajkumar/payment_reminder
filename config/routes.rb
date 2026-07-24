@@ -12,6 +12,14 @@ Rails.application.routes.draw do
   resources :invoices, only: :index
   resources :conversations, only: %i[index show] do
     scope module: :conversations do
+      resource :ai_analysis, only: :create
+      resources :ai_evaluations, only: :create
+      resources :customer_ai_signals, only: [] do
+        scope module: :customer_ai_signals do
+          resource :approval, only: :create
+          resource :rejection, only: :create
+        end
+      end
       resource :match, only: %i[new create]
       resources :reviews, only: :update, param: :message_id
       resources :replies, only: :create
@@ -40,6 +48,9 @@ Rails.application.routes.draw do
     resources :email_addresses,
       module: :customers,
       only: %i[index create destroy]
+    resources :ai_guidance_revisions,
+      module: :customers,
+      only: :create
   end
 
   scope module: :invoice_sources do
@@ -97,6 +108,8 @@ Rails.application.routes.draw do
     resource :settings, only: %i[show update]
     resource :notification_preferences, only: :update
     resource :customer_segment_refresh, only: :create
+    resource :conversation_ai_setting, only: :update
+    resource :conversation_ai_report, only: :show
   end
 
   get "up" => "rails/health#show", as: :rails_health_check

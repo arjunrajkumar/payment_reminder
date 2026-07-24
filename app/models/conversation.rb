@@ -31,6 +31,9 @@ class Conversation < ApplicationRecord
   has_many :conversation_escalations,
     dependent: :destroy,
     inverse_of: :conversation
+  has_many :conversation_interpretations,
+    dependent: :restrict_with_exception,
+    inverse_of: :conversation
 
   enum :status, STATUSES, prefix: true, validate: true
 

@@ -61,6 +61,19 @@ class User < ApplicationRecord
     foreign_key: :resolved_by_user_id,
     dependent: :restrict_with_exception,
     inverse_of: :resolved_by_user
+  has_many :conversation_ai_evaluations,
+    foreign_key: :actor_user_id,
+    dependent: :nullify,
+    inverse_of: :actor_user
+  has_many :customer_ai_guidance_revisions,
+    foreign_key: :author_user_id,
+    dependent: :nullify,
+    inverse_of: :author_user
+  has_many :decided_customer_ai_signals,
+    class_name: "CustomerAiSignal",
+    foreign_key: :decided_by_user_id,
+    dependent: :nullify,
+    inverse_of: :decided_by_user
 
   before_destroy :reset_workflow_evidence_associations, prepend: true
 

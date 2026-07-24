@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_24_150000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -18,14 +18,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
 
   create_table "accounts", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.boolean "automatic_invoice_reminders_enabled", default: false, null: false
+    t.datetime "conversation_ai_enabled_at"
+    t.string "conversation_ai_mode", default: "off", null: false
+    t.string "conversation_ai_provider"
     t.datetime "created_at", null: false
     t.bigint "external_account_id", null: false
     t.string "invoice_reminder_from_email"
     t.string "invoice_reminder_from_name"
     t.string "name", null: false
+    t.string "time_zone", default: "UTC", null: false
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
     t.index ["name"], name: "index_accounts_on_name"
+    t.check_constraint "`conversation_ai_mode` in (_utf8mb4'off',_utf8mb4'shadow')", name: "accounts_conversation_ai_mode"
   end
 
   create_table "collection_holds", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -193,6 +198,100 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
     t.check_constraint "`status` in (_utf8mb4'pending_approval',_utf8mb4'approved',_utf8mb4'rejected')", name: "conversation_actions_status"
   end
 
+  create_table "conversation_ai_evaluations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.json "actor_snapshot", null: false
+    t.bigint "actor_user_id"
+    t.bigint "conversation_ai_plan_id", null: false
+    t.bigint "conversation_interpretation_id", null: false
+    t.string "corrected_action_type"
+    t.json "corrected_arguments", null: false
+    t.string "corrected_message_kind"
+    t.datetime "created_at", null: false
+    t.string "idempotency_key", null: false, collation: "utf8mb4_0900_bin"
+    t.text "note"
+    t.bigint "supersedes_evaluation_id"
+    t.datetime "updated_at", null: false
+    t.string "verdict", null: false
+    t.index ["account_id", "idempotency_key"], name: "index_ai_evaluations_on_account_idempotency", unique: true
+    t.index ["account_id"], name: "index_conversation_ai_evaluations_on_account_id"
+    t.index ["actor_user_id"], name: "index_conversation_ai_evaluations_on_actor_user_id"
+    t.index ["conversation_ai_plan_id"], name: "index_conversation_ai_evaluations_on_conversation_ai_plan_id"
+    t.index ["conversation_interpretation_id", "created_at"], name: "index_ai_evaluations_on_interpretation_history"
+    t.index ["conversation_interpretation_id"], name: "idx_on_conversation_interpretation_id_d080086c01"
+    t.index ["supersedes_evaluation_id"], name: "index_conversation_ai_evaluations_on_supersedes_evaluation_id"
+    t.check_constraint "`verdict` in (_utf8mb4'correct',_utf8mb4'incorrect',_utf8mb4'unsure')", name: "conversation_ai_evaluations_verdict"
+  end
+
+  create_table "conversation_ai_invocations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "api_version", null: false
+    t.string "application_request_id", null: false, collation: "utf8mb4_0900_bin"
+    t.integer "attempt_number", null: false
+    t.string "attempt_token", null: false, collation: "utf8mb4_0900_bin"
+    t.integer "cached_input_tokens"
+    t.integer "claim_generation", null: false
+    t.bigint "conversation_interpretation_id", null: false
+    t.datetime "created_at", null: false
+    t.string "endpoint", null: false
+    t.string "failure_category"
+    t.string "failure_class"
+    t.string "failure_message", limit: 2000
+    t.datetime "finished_at"
+    t.integer "input_tokens"
+    t.integer "latency_ms"
+    t.integer "output_tokens"
+    t.boolean "possible_duplicate_cost", default: false, null: false
+    t.string "provider", null: false
+    t.string "provider_adapter_version", null: false
+    t.json "provider_metadata", null: false
+    t.string "provider_request_id"
+    t.string "requested_model", null: false
+    t.integer "response_status"
+    t.integer "retry_after_seconds"
+    t.string "returned_model"
+    t.json "sanitized_request", null: false
+    t.json "sanitized_response", null: false
+    t.datetime "started_at", null: false
+    t.string "status", default: "started", null: false
+    t.integer "total_tokens"
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "status", "created_at"], name: "index_ai_invocations_on_account_status"
+    t.index ["account_id"], name: "index_conversation_ai_invocations_on_account_id"
+    t.index ["application_request_id"], name: "index_ai_invocations_on_application_request", unique: true
+    t.index ["conversation_interpretation_id", "attempt_number"], name: "index_ai_invocations_on_interpretation_attempt", unique: true
+    t.index ["conversation_interpretation_id"], name: "idx_on_conversation_interpretation_id_4ccc2211f7"
+    t.check_constraint "((`status` = _utf8mb4'started') and (`finished_at` is null)) or ((`status` <> _utf8mb4'started') and (`finished_at` is not null))", name: "conversation_ai_invocations_finished"
+    t.check_constraint "(`attempt_number` > 0) and (`attempt_number` <= 5) and (`claim_generation` >= 0)", name: "conversation_ai_invocations_attempt"
+    t.check_constraint "`status` in (_utf8mb4'started',_utf8mb4'succeeded',_utf8mb4'failed',_utf8mb4'uncertain',_utf8mb4'superseded')", name: "conversation_ai_invocations_status"
+  end
+
+  create_table "conversation_ai_plans", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.json "arguments", null: false
+    t.string "catalog_version", null: false
+    t.integer "confidence_bps"
+    t.bigint "conversation_interpretation_id", null: false
+    t.datetime "created_at", null: false
+    t.string "decision", null: false
+    t.json "planner_reason_codes", null: false
+    t.string "planner_version", null: false
+    t.string "proposed_action_type"
+    t.json "proposed_reply", null: false
+    t.string "status", default: "current", null: false
+    t.datetime "superseded_at"
+    t.datetime "updated_at", null: false
+    t.string "user_facing_summary", limit: 1000, null: false
+    t.index ["account_id", "decision", "created_at"], name: "index_ai_plans_on_account_decision"
+    t.index ["account_id"], name: "index_conversation_ai_plans_on_account_id"
+    t.index ["conversation_interpretation_id"], name: "index_conversation_ai_plans_on_conversation_interpretation_id", unique: true
+    t.check_constraint "((`decision` = _utf8mb4'propose_action') and (`proposed_action_type` is not null)) or ((`decision` <> _utf8mb4'propose_action') and (`proposed_action_type` is null))", name: "conversation_ai_plans_action"
+    t.check_constraint "((`status` = _utf8mb4'current') and (`superseded_at` is null)) or ((`status` = _utf8mb4'superseded') and (`superseded_at` is not null))", name: "conversation_ai_plans_lifecycle"
+    t.check_constraint "(`confidence_bps` is null) or ((`confidence_bps` >= 0) and (`confidence_bps` <= 10000))", name: "conversation_ai_plans_confidence"
+    t.check_constraint "`decision` in (_utf8mb4'propose_action',_utf8mb4'human_review',_utf8mb4'no_action')", name: "conversation_ai_plans_decision"
+    t.check_constraint "`status` in (_utf8mb4'current',_utf8mb4'superseded')", name: "conversation_ai_plans_status"
+  end
+
   create_table "conversation_escalations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.string "category", null: false
@@ -240,6 +339,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
     t.bigint "account_id", null: false
     t.string "actor_kind", null: false
     t.bigint "actor_user_id"
+    t.string "ai_event_key", collation: "utf8mb4_0900_bin"
     t.bigint "conversation_id", null: false
     t.bigint "conversation_message_id"
     t.datetime "created_at", null: false
@@ -248,10 +348,95 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
     t.json "metadata", null: false
     t.index ["account_id", "kind", "created_at"], name: "index_conversation_events_on_account_kind_created_at"
     t.index ["actor_user_id"], name: "index_conversation_events_on_actor_user_id"
+    t.index ["ai_event_key"], name: "index_conversation_events_on_ai_event_key", unique: true
     t.index ["conversation_id", "created_at", "id"], name: "index_conversation_events_on_conversation_created_at_id"
     t.index ["conversation_message_id", "kind"], name: "index_conversation_events_on_message_and_kind", unique: true
     t.index ["conversation_message_id"], name: "index_conversation_events_on_conversation_message_id"
     t.index ["execution_event_key"], name: "index_conversation_events_on_execution_event_key", unique: true
+  end
+
+  create_table "conversation_interpretations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.string "accepted_model"
+    t.bigint "account_id", null: false
+    t.string "analysis_key", null: false, collation: "utf8mb4_0900_bin"
+    t.text "authored_content_snapshot"
+    t.json "authored_content_warnings", null: false
+    t.datetime "canceled_at"
+    t.string "catalog_version", null: false
+    t.integer "claim_generation", default: 0, null: false
+    t.string "claim_token", collation: "utf8mb4_0900_bin"
+    t.datetime "claimed_at"
+    t.datetime "completed_at"
+    t.text "concise_rationale"
+    t.json "context_snapshot", null: false
+    t.bigint "conversation_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_ai_guidance_revision_id"
+    t.bigint "customer_id"
+    t.string "failure_category"
+    t.text "failure_reason"
+    t.datetime "finalized_at"
+    t.string "input_digest", collation: "utf8mb4_0900_bin"
+    t.bigint "invoice_id"
+    t.string "language"
+    t.string "last_scheduling_error", limit: 2000
+    t.integer "lock_version", default: 0, null: false
+    t.string "message_kind"
+    t.datetime "next_retry_at"
+    t.datetime "next_scheduling_at"
+    t.integer "overall_confidence_bps"
+    t.string "planner_version", null: false
+    t.string "provider", null: false
+    t.string "provider_adapter_version", null: false
+    t.integer "provider_attempts", default: 0, null: false
+    t.json "reason_codes", null: false
+    t.string "requested_mode", default: "shadow", null: false
+    t.string "requested_model", null: false
+    t.boolean "requires_human"
+    t.string "result_schema_version", null: false
+    t.integer "scheduling_attempts", default: 0, null: false
+    t.datetime "scheduling_claimed_at"
+    t.datetime "scheduling_consumed_at"
+    t.datetime "scheduling_enqueued_at"
+    t.integer "scheduling_generation", default: 0, null: false
+    t.string "scheduling_status", default: "reserved", null: false
+    t.string "scheduling_token", collation: "utf8mb4_0900_bin"
+    t.string "semantic_prompt_version", null: false
+    t.json "source_identity_snapshot", null: false
+    t.bigint "source_message_id", null: false
+    t.datetime "started_at"
+    t.string "status", default: "pending", null: false
+    t.json "structured_result", null: false
+    t.string "summary", limit: 1000
+    t.datetime "superseded_at"
+    t.bigint "supersedes_interpretation_id"
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "analysis_key"], name: "index_interpretations_on_account_analysis_key", unique: true
+    t.index ["account_id", "conversation_id", "status", "created_at"], name: "index_interpretations_on_conversation_status"
+    t.index ["account_id", "provider", "requested_model", "semantic_prompt_version"], name: "index_interpretations_on_report_versions"
+    t.index ["account_id", "source_message_id", "created_at"], name: "index_interpretations_on_source_history"
+    t.index ["account_id", "status", "completed_at", "id"], name: "index_interpretations_on_account_status"
+    t.index ["account_id"], name: "index_conversation_interpretations_on_account_id"
+    t.index ["conversation_id"], name: "index_conversation_interpretations_on_conversation_id"
+    t.index ["customer_ai_guidance_revision_id"], name: "idx_on_customer_ai_guidance_revision_id_7a24722c4e"
+    t.index ["customer_id"], name: "index_conversation_interpretations_on_customer_id"
+    t.index ["invoice_id"], name: "index_conversation_interpretations_on_invoice_id"
+    t.index ["scheduling_status", "next_scheduling_at", "id"], name: "index_interpretations_on_due_scheduling"
+    t.index ["scheduling_status", "scheduling_claimed_at", "id"], name: "index_interpretations_on_stale_scheduling"
+    t.index ["scheduling_status", "scheduling_enqueued_at", "scheduling_consumed_at", "id"], name: "index_interpretations_on_lost_scheduling"
+    t.index ["source_message_id"], name: "index_conversation_interpretations_on_source_message_id"
+    t.index ["status", "claimed_at", "id"], name: "index_interpretations_on_stale_claims"
+    t.index ["status", "finalized_at", "id"], name: "index_interpretations_on_finalization"
+    t.index ["status", "next_retry_at", "id"], name: "index_interpretations_on_due_retry"
+    t.index ["supersedes_interpretation_id"], name: "idx_on_supersedes_interpretation_id_cf1aa8fcd8"
+    t.check_constraint "((`scheduling_status` = _utf8mb4'claimed') and (`scheduling_token` is not null) and (`scheduling_claimed_at` is not null)) or ((`scheduling_status` <> _utf8mb4'claimed') and (`scheduling_token` is null) and (`scheduling_claimed_at` is null))", name: "conversation_interpretations_schedule_claim"
+    t.check_constraint "((`status` = _utf8mb4'running') and (`claim_token` is not null) and (`claimed_at` is not null)) or ((`status` <> _utf8mb4'running') and (`claim_token` is null) and (`claimed_at` is null))", name: "conversation_interpretations_claim"
+    t.check_constraint "((`status` in (_utf8mb4'succeeded',_utf8mb4'failed',_utf8mb4'skipped')) and (`completed_at` is not null)) or ((`status` = _utf8mb4'canceled') and (`canceled_at` is not null)) or ((`status` = _utf8mb4'superseded') and (`superseded_at` is not null)) or ((`status` in (_utf8mb4'pending',_utf8mb4'running')) and (`completed_at` is null) and (`canceled_at` is null) and (`superseded_at` is null))", name: "conversation_interpretations_terminal"
+    t.check_constraint "(`overall_confidence_bps` is null) or ((`overall_confidence_bps` >= 0) and (`overall_confidence_bps` <= 10000))", name: "conversation_interpretations_confidence"
+    t.check_constraint "(`scheduling_attempts` >= 0) and (`scheduling_attempts` <= 5) and (`scheduling_generation` >= 0) and (`provider_attempts` >= 0) and (`provider_attempts` <= 5) and (`claim_generation` >= 0)", name: "conversation_interpretations_attempts"
+    t.check_constraint "`requested_mode` = _utf8mb4'shadow'", name: "conversation_interpretations_mode"
+    t.check_constraint "`scheduling_status` in (_utf8mb4'reserved',_utf8mb4'claimed',_utf8mb4'enqueued',_utf8mb4'consumed',_utf8mb4'exhausted',_utf8mb4'canceled')", name: "conversation_interpretations_scheduling_status"
+    t.check_constraint "`status` in (_utf8mb4'pending',_utf8mb4'running',_utf8mb4'succeeded',_utf8mb4'failed',_utf8mb4'canceled',_utf8mb4'superseded',_utf8mb4'skipped')", name: "conversation_interpretations_status"
   end
 
   create_table "conversation_messages", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -357,6 +542,84 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
     t.index ["customer_id", "status", "updated_at"], name: "index_conversations_on_customer_status_updated_at"
     t.index ["invoice_id"], name: "index_conversations_on_invoice_id", unique: true
     t.check_constraint "((`status` = _utf8mb4'open') and (`resolved_at` is null)) or ((`status` = _utf8mb4'resolved') and (`resolved_at` is not null))", name: "conversations_status_and_resolved_at_consistent"
+  end
+
+  create_table "customer_ai_guidance_revisions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.datetime "activated_at"
+    t.string "author_kind", null: false
+    t.json "author_snapshot", null: false
+    t.bigint "author_user_id"
+    t.datetime "created_at", null: false
+    t.bigint "customer_ai_profile_id", null: false
+    t.json "evidence_snapshot", null: false
+    t.string "idempotency_key", null: false, collation: "utf8mb4_0900_bin"
+    t.datetime "rejected_at"
+    t.integer "revision_number", null: false
+    t.bigint "source_signal_id"
+    t.string "status", null: false
+    t.json "structured_guidance", null: false
+    t.string "summary", limit: 500, null: false
+    t.datetime "superseded_at"
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "status", "created_at"], name: "index_customer_ai_guidance_on_account_status"
+    t.index ["account_id"], name: "index_customer_ai_guidance_revisions_on_account_id"
+    t.index ["author_user_id"], name: "index_customer_ai_guidance_revisions_on_author_user_id"
+    t.index ["customer_ai_profile_id", "idempotency_key"], name: "index_customer_ai_guidance_on_profile_idempotency", unique: true
+    t.index ["customer_ai_profile_id", "revision_number"], name: "index_customer_ai_guidance_on_profile_revision", unique: true
+    t.index ["customer_ai_profile_id"], name: "index_customer_ai_guidance_revisions_on_customer_ai_profile_id"
+    t.index ["source_signal_id"], name: "index_customer_ai_guidance_revisions_on_source_signal_id"
+    t.check_constraint "((`status` = _utf8mb4'active') and (`activated_at` is not null) and (`rejected_at` is null) and (`superseded_at` is null)) or ((`status` = _utf8mb4'rejected') and (`rejected_at` is not null) and (`activated_at` is null) and (`superseded_at` is null)) or ((`status` = _utf8mb4'superseded') and (`superseded_at` is not null) and (`activated_at` is not null) and (`rejected_at` is null)) or ((`status` = _utf8mb4'proposed') and (`activated_at` is null) and (`rejected_at` is null) and (`superseded_at` is null))", name: "customer_ai_guidance_revisions_lifecycle"
+    t.check_constraint "`author_kind` in (_utf8mb4'user',_utf8mb4'ai')", name: "customer_ai_guidance_revisions_author_kind"
+    t.check_constraint "`revision_number` > 0", name: "customer_ai_guidance_revisions_number"
+    t.check_constraint "`status` in (_utf8mb4'proposed',_utf8mb4'active',_utf8mb4'rejected',_utf8mb4'superseded')", name: "customer_ai_guidance_revisions_status"
+  end
+
+  create_table "customer_ai_profiles", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "active_guidance_revision_id"
+    t.datetime "created_at", null: false
+    t.bigint "customer_id", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "customer_id"], name: "index_customer_ai_profiles_on_account_customer", unique: true
+    t.index ["account_id"], name: "index_customer_ai_profiles_on_account_id"
+    t.index ["active_guidance_revision_id"], name: "index_customer_ai_profiles_on_active_revision", unique: true
+    t.index ["customer_id"], name: "index_customer_ai_profiles_on_customer_id"
+  end
+
+  create_table "customer_ai_signals", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.integer "confidence_bps", null: false
+    t.bigint "conversation_interpretation_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_id", null: false
+    t.datetime "decided_at"
+    t.bigint "decided_by_user_id"
+    t.json "decider_snapshot", null: false
+    t.string "decision_idempotency_key", collation: "utf8mb4_0900_bin"
+    t.text "decision_note"
+    t.json "evidence", null: false
+    t.string "idempotency_key", null: false, collation: "utf8mb4_0900_bin"
+    t.json "proposed_guidance", null: false
+    t.string "signal_type", null: false
+    t.bigint "source_message_id", null: false
+    t.string "status", default: "proposed", null: false
+    t.bigint "target_outbound_message_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "customer_id", "status", "created_at"], name: "index_customer_ai_signals_on_customer_status"
+    t.index ["account_id", "decision_idempotency_key"], name: "index_customer_ai_signals_on_decision_key", unique: true
+    t.index ["account_id"], name: "index_customer_ai_signals_on_account_id"
+    t.index ["conversation_interpretation_id", "idempotency_key"], name: "index_customer_ai_signals_on_interpretation_key", unique: true
+    t.index ["conversation_interpretation_id"], name: "index_customer_ai_signals_on_conversation_interpretation_id"
+    t.index ["customer_id"], name: "index_customer_ai_signals_on_customer_id"
+    t.index ["decided_by_user_id"], name: "index_customer_ai_signals_on_decided_by_user_id"
+    t.index ["source_message_id"], name: "index_customer_ai_signals_on_source_message_id"
+    t.index ["target_outbound_message_id"], name: "index_customer_ai_signals_on_target_outbound_message_id"
+    t.check_constraint "((`status` = _utf8mb4'proposed') and (`decided_at` is null) and (`decision_idempotency_key` is null)) or ((`status` <> _utf8mb4'proposed') and (`decided_at` is not null) and (`decision_idempotency_key` is not null))", name: "customer_ai_signals_decision"
+    t.check_constraint "(`confidence_bps` >= 0) and (`confidence_bps` <= 10000)", name: "customer_ai_signals_confidence"
+    t.check_constraint "`signal_type` in (_utf8mb4'positive_response',_utf8mb4'negative_response',_utf8mb4'factual_correction',_utf8mb4'tone_preference',_utf8mb4'language_preference',_utf8mb4'salutation_preference',_utf8mb4'concision_preference',_utf8mb4'unclear')", name: "customer_ai_signals_type"
+    t.check_constraint "`status` in (_utf8mb4'proposed',_utf8mb4'approved',_utf8mb4'rejected',_utf8mb4'superseded')", name: "customer_ai_signals_status"
   end
 
   create_table "customer_email_addresses", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -775,6 +1038,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
   add_foreign_key "conversation_actions", "conversations"
   add_foreign_key "conversation_actions", "users", column: "created_by_user_id"
   add_foreign_key "conversation_actions", "users", column: "decided_by_user_id", on_delete: :nullify
+  add_foreign_key "conversation_ai_evaluations", "accounts"
+  add_foreign_key "conversation_ai_evaluations", "conversation_ai_evaluations", column: "supersedes_evaluation_id", on_delete: :nullify
+  add_foreign_key "conversation_ai_evaluations", "conversation_ai_plans"
+  add_foreign_key "conversation_ai_evaluations", "conversation_interpretations"
+  add_foreign_key "conversation_ai_evaluations", "users", column: "actor_user_id", on_delete: :nullify
+  add_foreign_key "conversation_ai_invocations", "accounts"
+  add_foreign_key "conversation_ai_invocations", "conversation_interpretations"
+  add_foreign_key "conversation_ai_plans", "accounts"
+  add_foreign_key "conversation_ai_plans", "conversation_interpretations"
   add_foreign_key "conversation_escalations", "accounts"
   add_foreign_key "conversation_escalations", "collection_holds", on_delete: :nullify
   add_foreign_key "conversation_escalations", "conversation_actions", on_delete: :nullify
@@ -788,6 +1060,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
   add_foreign_key "conversation_events", "conversation_messages", on_delete: :nullify
   add_foreign_key "conversation_events", "conversations"
   add_foreign_key "conversation_events", "users", column: "actor_user_id", on_delete: :nullify
+  add_foreign_key "conversation_interpretations", "accounts"
+  add_foreign_key "conversation_interpretations", "conversation_interpretations", column: "supersedes_interpretation_id", on_delete: :nullify
+  add_foreign_key "conversation_interpretations", "conversation_messages", column: "source_message_id"
+  add_foreign_key "conversation_interpretations", "conversations"
+  add_foreign_key "conversation_interpretations", "customer_ai_guidance_revisions", on_delete: :nullify
+  add_foreign_key "conversation_interpretations", "customers", on_delete: :nullify
+  add_foreign_key "conversation_interpretations", "invoices", on_delete: :nullify
   add_foreign_key "conversation_messages", "accounts"
   add_foreign_key "conversation_messages", "conversation_action_executions", on_delete: :nullify
   add_foreign_key "conversation_messages", "conversation_messages", column: "reply_to_message_id"
@@ -800,6 +1079,19 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
   add_foreign_key "conversations", "conversations", column: "canonical_conversation_id"
   add_foreign_key "conversations", "customers", on_delete: :nullify
   add_foreign_key "conversations", "invoices"
+  add_foreign_key "customer_ai_guidance_revisions", "accounts"
+  add_foreign_key "customer_ai_guidance_revisions", "customer_ai_profiles"
+  add_foreign_key "customer_ai_guidance_revisions", "customer_ai_signals", column: "source_signal_id", on_delete: :nullify
+  add_foreign_key "customer_ai_guidance_revisions", "users", column: "author_user_id", on_delete: :nullify
+  add_foreign_key "customer_ai_profiles", "accounts"
+  add_foreign_key "customer_ai_profiles", "customer_ai_guidance_revisions", column: "active_guidance_revision_id", on_delete: :nullify
+  add_foreign_key "customer_ai_profiles", "customers"
+  add_foreign_key "customer_ai_signals", "accounts"
+  add_foreign_key "customer_ai_signals", "conversation_interpretations"
+  add_foreign_key "customer_ai_signals", "conversation_messages", column: "source_message_id"
+  add_foreign_key "customer_ai_signals", "conversation_messages", column: "target_outbound_message_id"
+  add_foreign_key "customer_ai_signals", "customers"
+  add_foreign_key "customer_ai_signals", "users", column: "decided_by_user_id", on_delete: :nullify
   add_foreign_key "customer_email_addresses", "customers", on_delete: :cascade
   add_foreign_key "customer_segments", "accounts"
   add_foreign_key "customers", "accounts"

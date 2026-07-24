@@ -7,6 +7,7 @@ class Account::SettingsController < ApplicationController
   before_action :set_customer_segments
   before_action :set_notification_preferences
   before_action :set_email_connection
+  before_action :set_conversation_ai_health
 
   def show; end
 
@@ -65,5 +66,9 @@ class Account::SettingsController < ApplicationController
 
     def set_email_connection
       @email_connection = @account.email_connection
+    end
+
+    def set_conversation_ai_health
+      @conversation_ai_health = ConversationAi::Health.call(account: @account)
     end
 end

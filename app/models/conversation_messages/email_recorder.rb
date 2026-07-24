@@ -106,7 +106,9 @@ class ConversationMessages::EmailRecorder
   end
 
   def call
-    record
+    record.tap do |recorded_message|
+      ConversationAi::EligibilityHook.for_message(recorded_message) if recorded_message
+    end
   end
 
   private

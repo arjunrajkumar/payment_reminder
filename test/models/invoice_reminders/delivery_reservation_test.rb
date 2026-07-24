@@ -21,6 +21,7 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
     assert_equal email_connections(:paid_jar_gmail), @reservation.connection
     assert_equal "Upcoming Payment Due: Invoice INV-001", @reservation.mail_message.subject
 
+    assert_not_predicate @reservation.reminder, :terminal_at_delivery?
     message = @reservation.reminder.conversation_message
     assert_equal Conversation.for_invoice!(invoice: @invoice), message.conversation
     assert_predicate message, :status_pending?
@@ -32,6 +33,23 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
     assert_match(/\A<.+@paymentreminder\.local>\z/, message.internet_message_id)
     assert_equal [ "customer@example.com" ], message.to_addresses
     assert_match "friendly reminder", message.body
+  end
+
+  test "snapshots terminal intent when the reminder is reserved" do
+    travel_to Time.zone.local(2026, 8, 14, 12) do
+      reservation = InvoiceReminders::DeliveryReservation.call(
+        invoice: @invoice.reload,
+        category: :overdue,
+        day_offset: 14,
+        delivery_job_id: "terminal-snapshot-job"
+      )
+
+      assert_predicate reservation, :reserved?
+      assert_predicate reservation.reminder, :terminal_at_delivery?
+      assert_raises ActiveRecord::RecordInvalid do
+        reservation.reminder.update!(terminal_at_delivery: false)
+      end
+    end
   end
 
   test "does not reuse a pending reminder after the Gmail identity is replaced" do
@@ -105,6 +123,22 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
       :reason_recent_outbound_message?
   end
 
+  test "a hold under the invoice lock suppresses the stage without reserving delivery" do
+    place_hold
+
+    travel_to reminder_time do
+      assert_difference -> { @invoice.invoice_reminder_suppressions.count }, 1 do
+        assert_no_difference -> { @invoice.invoice_reminders.count } do
+          @reservation = reserve
+        end
+      end
+    end
+
+    assert_equal "active_collection_hold", @reservation.reason
+    assert_predicate @invoice.invoice_reminder_suppressions.last,
+      :reason_active_collection_hold?
+  end
+
   test "does not reserve while another outbound delivery is pending" do
     @invoice.conversation_messages.create!(
       account: @invoice.account,
@@ -160,5 +194,15 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
 
     def reminder_time
       Time.zone.local(2026, 7, 24, 12)
+    end
+
+    def place_hold
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :manual,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "reservation-hold"
+      )
     end
 end

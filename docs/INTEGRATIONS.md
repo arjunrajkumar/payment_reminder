@@ -311,6 +311,19 @@ and send a verified threaded reply from an invoice conversation. PaymentReminder
 Gmail labels or read state, and does not store raw MIME or attachment bodies. Gmail push
 notifications, AI processing, and automatic actions are not implemented.
 
+Invoice collection holds are enforced independently of Gmail. The scheduler, queued-job preflight,
+locked reservation, and final automated-delivery handoff all recheck active holds. A due scheduled
+stage skipped during a hold receives its normal durable suppression receipt and is not sent
+retroactively after release; later stages keep their original dates. Payment-promise follow-ups
+pause without resolving the promise and are reconsidered after every hold is released. Human
+threaded replies remain available during a hold. Once a Gmail provider request has passed the final
+delivery handoff, it cannot be recalled.
+
+Action approvals in the Inbox do not call Gmail. The action/revision/approval foundation records
+review evidence only; deterministic commands, action execution, AI classification, AI-generated
+actions or replies, customer-specific AI learning, automatic dispute processing, and automatic
+allowlisting are not implemented.
+
 ### Create the Google OAuth application
 
 1. Create or select a Google Cloud project.

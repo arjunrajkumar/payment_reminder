@@ -22,8 +22,9 @@ class ConversationMessages::ReconcilePendingDeliveriesJob < ApplicationJob
 
     ConversationMessage.stale_pending_deliveries(before: cutoff).find_each do |message|
       manual_reply = message.kind_manual_reply?
+      delivery_was_claimed = message.provider_delivery_claimed?
       attempted_manual_reply = manual_reply && message.delivery_attempted_at.present?
-      failure_reason = if attempted_manual_reply
+      failure_reason = if delivery_was_claimed || attempted_manual_reply
         ConversationMessages::ProviderDelivery::UNCONFIRMED_FAILURE_REASON
       else
         FAILURE_REASON
@@ -31,7 +32,7 @@ class ConversationMessages::ReconcilePendingDeliveriesJob < ApplicationJob
       next unless message.reconcile_stale_delivery!(
         before: cutoff,
         failure_reason:,
-        delivery_uncertain: attempted_manual_reply
+        delivery_uncertain: delivery_was_claimed || attempted_manual_reply
       )
 
       reconciled_count += 1

@@ -31,22 +31,38 @@ class Conversations::Attention
       at: Time.current,
       metadata: {}
     )
-      target = conversation.canonical
-      target.with_lock do
+      target = Conversations::ReviewWorkUnit.workflow_owner_for(
+        conversation:
+      )
+      conversation_ids = Conversations::ReviewWorkUnit
+        .workflow_conversation_ids_for(conversation: target)
+      Conversation.transaction do
+        locked = target.account.conversations
+          .where(id: conversation_ids)
+          .order(:id)
+          .lock
+          .index_by(&:id)
+        locked.each_value do |member|
+          next if member.id == target.id
+          next if member.attention_required_at.nil?
+
+          member.update!(attention_required_at: nil)
+        end
+        target = locked.fetch(target.id)
         previous_attention_at = target.attention_required_at
         outstanding_at = outstanding_attention_at(target)
-        next if previous_attention_at == outstanding_at
-
-        target.update!(attention_required_at: outstanding_at)
-        if previous_attention_at.present? && outstanding_at.nil?
-          target.conversation_events.create!(
-            account: target.account,
-            kind: :conversation_attention_cleared,
-            actor_kind: actor_user ? :user : :system,
-            actor_user:,
-            metadata:,
-            created_at: at
-          )
+        unless previous_attention_at == outstanding_at
+          target.update!(attention_required_at: outstanding_at)
+          if previous_attention_at.present? && outstanding_at.nil?
+            target.conversation_events.create!(
+              account: target.account,
+              kind: :conversation_attention_cleared,
+              actor_kind: actor_user ? :user : :system,
+              actor_user:,
+              metadata:,
+              created_at: at
+            )
+          end
         end
       end
       target
@@ -60,12 +76,30 @@ class Conversations::Attention
           latest_review_attention(messages),
           latest_unanswered_inbound(messages, conversation),
           latest_manual_reply_failure(messages, conversation),
+          latest_pending_action(conversation),
+          latest_open_escalation(conversation),
           unknown_attention_at(messages, conversation)
         ].compact.max
       end
 
       def unknown_attention_at(messages, conversation)
         current = conversation.attention_required_at
+        return unless current
+        resolving_event_at = conversation.account.conversation_events
+          .where(
+            conversation_id: Conversations::ReviewWorkUnit
+              .workflow_conversation_ids_for(conversation:)
+          )
+          .where(
+            kind: %i[
+              conversation_action_approved
+              conversation_action_rejected
+              conversation_escalation_resolved
+            ]
+          )
+          .maximum(:created_at)
+        return if resolving_event_at && current <= resolving_event_at
+
         latest_message_at = messages.maximum(
           Arel.sql("COALESCE(received_at, sent_at, created_at)")
         )
@@ -138,6 +172,28 @@ class Conversations::Attention
           event.conversation_message&.reply_to_message&.occurred_at ||
             event.created_at
         end.max
+      end
+
+      def latest_pending_action(conversation)
+        conversation.account.conversation_actions
+          .where(
+            conversation_id: Conversations::ReviewWorkUnit
+              .workflow_conversation_ids_for(conversation:)
+          )
+          .status_pending_approval
+          .includes(:revisions)
+          .filter_map { |action| action.current_revision&.created_at }
+          .max
+      end
+
+      def latest_open_escalation(conversation)
+        conversation.account.conversation_escalations
+          .where(
+            conversation_id: Conversations::ReviewWorkUnit
+              .workflow_conversation_ids_for(conversation:)
+          )
+          .status_open
+          .maximum(:last_opened_at)
       end
 
       def latest_user_acknowledgement(conversation)

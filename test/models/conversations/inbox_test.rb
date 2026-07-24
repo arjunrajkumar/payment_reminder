@@ -271,6 +271,67 @@ class Conversations::InboxTest < ActiveSupport::TestCase
     )
   end
 
+  test "late-owner workflow mutations reorder the visible row before pagination" do
+    source = @account.conversations.create!
+    source_message = create_message(
+      conversation: source,
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: 4.days.ago,
+      review_required: true,
+      provider_thread_id: "late-owner-ordering"
+    )
+    action = ConversationActions::Proposal.record!(
+      conversation: source,
+      action_type: :other,
+      origin_kind: :user,
+      created_by_user: users(:arjun),
+      user_facing_summary: "Older hidden workflow.",
+      idempotency_key: "late-owner-ordering-action",
+      at: 4.days.ago
+    )
+    owner = Conversation.for_invoice!(invoice: @invoice)
+    create_message(
+      conversation: owner,
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: 3.days.ago,
+      review_required: true,
+      provider_thread_id: source_message.provider_thread_id,
+      invoice: @invoice
+    )
+    other = @account.conversations.create!
+    create_message(
+      conversation: other,
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: 1.day.ago
+    )
+    Conversations::Detail.call(conversation: owner)
+    revision_key = "late-owner-ordering-revision"
+    ConversationActions::Revision.record!(
+      action:,
+      author_kind: :user,
+      author_user: users(:arjun),
+      user_facing_summary: "Newest visible workflow activity.",
+      rationale: nil,
+      proposed_reply: {},
+      idempotency_key: revision_key,
+      snapshot_token: ConversationActions::ActionSnapshot.token_for(
+        action:,
+        idempotency_key: revision_key
+      ),
+      at: Time.current
+    )
+
+    first = Conversations::Inbox.call(account: @account).first
+    assert_equal owner, first
+    assert_not_equal other, first
+  end
+
   test "decoration instantiates only bounded latest messages as history grows" do
     conversation = @account.conversations.create!
     25.times do |index|
@@ -300,6 +361,33 @@ class Conversations::InboxTest < ActiveSupport::TestCase
     assert_operator instantiated_messages, :<=, 2
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
+  end
+
+  test "source-less workflow evidence makes a canonical conversation visible" do
+    conversation = Conversation.for_invoice!(invoice: @invoice)
+    action = ConversationActions::Proposal.record!(
+      conversation:,
+      action_type: :other,
+      origin_kind: :user,
+      created_by_user: users(:arjun),
+      user_facing_summary: "Review a source-less collection action.",
+      idempotency_key: "source-less-inbox-action"
+    )
+
+    conversations = Conversations::Inbox.call(
+      account: @account,
+      filter: :needs_attention
+    ).to_a
+    entry = Conversations::Inbox.decorate(
+      account: @account,
+      conversations:
+    ).sole
+
+    assert_equal [ conversation ], conversations
+    assert_nil entry.latest_message
+    assert_equal action.current_revision.user_facing_summary,
+      entry.workflow_summary
+    assert_equal action.updated_at, entry.latest_activity_at
   end
 
   private

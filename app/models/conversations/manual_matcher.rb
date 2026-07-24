@@ -49,18 +49,25 @@ class Conversations::ManualMatcher
       provider_thread_id: reviewed_message.provider_thread_id
     ) do
       validate_records!
-      work_unit_conversation.with_lock do
-        Conversations::WorkUnitSnapshot.verify!(
-          token: work_unit_token,
-          conversation: work_unit_conversation
-        )
-        result = target_invoice ? link_to_invoice : assign_customer
-        reconsider_related_receipts!
-        result
+      Receivables::AccountLock.synchronize(account:) do
+        work_unit_conversation.with_lock do
+          Conversations::WorkUnitSnapshot.verify!(
+            token: work_unit_token,
+            conversation: work_unit_conversation
+          )
+          Conversation.transaction(requires_new: true) do
+            result = target_invoice ? link_to_invoice : assign_customer
+            reconsider_related_receipts!
+            result
+          end
+        end
       end
     end
   rescue EmailConnection::MailboxThreadLock::Unavailable
     raise Error, "This Gmail thread is being updated. Please try again."
+  rescue Conversations::ReviewWorkUnit::SplitInvoiceWorkUnit
+    raise InvalidSelection,
+      "This Gmail thread is already linked to another invoice."
   end
 
   private
@@ -100,6 +107,23 @@ class Conversations::ManualMatcher
       Conversation.transaction do
         @target_invoice = account.invoices.lock.find(target_invoice.id)
         @target_customer = target_invoice.customer
+        requested_owner = account.conversations.find(source_conversation.id).canonical
+        if requested_owner.invoice_id.present? &&
+            requested_owner.invoice_id != target_invoice.id
+          raise AlreadyLinked,
+            "This thread is already linked to another invoice."
+        end
+        existing_owner_ids = Conversations::ReviewWorkUnit
+          .invoice_owner_ids_for(message: reviewed_message)
+        existing_owners = account.conversations
+          .where(id: existing_owner_ids)
+          .order(:id)
+          .lock
+          .to_a
+        if existing_owners.any? { |owner| owner.invoice_id != target_invoice.id }
+          raise InvalidSelection,
+            "This Gmail thread is already linked to another invoice."
+        end
         target = Conversation.for_invoice!(invoice: target_invoice)
         source_ids = covered_source_ids
         locked = account.conversations
@@ -112,6 +136,7 @@ class Conversations::ManualMatcher
         validate_link_targets!(sources, locked_target)
 
         covered_messages = lock_covered_messages(sources)
+        actions, escalations = lock_workflow_records(sources)
         already_applied = sources.all? do |source|
           source.canonical_conversation_id == locked_target.id
         end && covered_messages.all? do |message|
@@ -131,6 +156,12 @@ class Conversations::ManualMatcher
           )
         end
         review_and_assign_invoice!(covered_messages)
+        transfer_workflow_records!(
+          actions:,
+          escalations:,
+          target: locked_target,
+          validated_message_ids: covered_messages.map(&:id)
+        )
         transfer_attention!(sources, locked_target)
         record_link_events!(sources, locked_target, covered_messages)
         result = locked_target
@@ -188,6 +219,21 @@ class Conversations::ManualMatcher
         .to_a
     end
 
+    def lock_workflow_records(sources)
+      source_ids = sources.map(&:id)
+      actions = account.conversation_actions
+        .where(conversation_id: source_ids)
+        .order(:id)
+        .lock
+        .to_a
+      escalations = account.conversation_escalations
+        .where(conversation_id: source_ids)
+        .order(:id)
+        .lock
+        .to_a
+      [ actions, escalations ]
+    end
+
     def validate_link_targets!(sources, target)
       sources.each do |source|
         if source.invoice_id.present?
@@ -240,6 +286,28 @@ class Conversations::ManualMatcher
         source.update!(attention_required_at: nil) if source.attention_required_at.present?
       end
       Conversations::Attention.recompute!(conversation: target)
+    end
+
+    def transfer_workflow_records!(
+      actions:,
+      escalations:,
+      target:,
+      validated_message_ids:
+    )
+      actions.each do |action|
+        action.send(
+          :transfer_to_conversation!,
+          target,
+          validated_message_ids:
+        )
+      end
+      escalations.each do |escalation|
+        escalation.send(
+          :transfer_to_conversation!,
+          target,
+          validated_message_ids:
+        )
+      end
     end
 
     def record_link_events!(sources, target, messages)

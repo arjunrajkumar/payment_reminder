@@ -75,6 +75,16 @@ ordinary user, and operator behavior exposed through the platform-admin panel.
 - **Available:** account users have a paginated conversation Inbox with attention and review
   filters, canonical invoice conversations, unmatched sender identity, and a chronological
   message/event timeline.
+- **Available:** the Inbox shows proposed actions with immutable revisions and lets account users
+  edit human-visible proposal content, approve or reject the exact current revision, and retain the
+  decision actor, time, and rationale. Approval records a decision only; it does not execute an
+  action or send a message.
+- **Available:** account users can place multiple independent invoice collection holds and release
+  each one explicitly. Active holds visibly pause scheduled reminders and payment-promise
+  follow-ups while leaving the manual reply composer available.
+- **Available:** account users can open, resolve, and reopen conversation escalations. Pending
+  action approvals and open escalations remain Inbox attention work until they are decided or
+  resolved; a hold by itself is visibly badged but does not permanently require attention.
 - **Not built:** a dedicated customer profile, invoice detail page, search, user-entered invoice
   editing, or accounting-provider write-back.
 
@@ -114,9 +124,9 @@ ordinary user, and operator behavior exposed through the platform-admin panel.
   Gmail state is never modified; raw MIME and attachments are not retained.
 - **Available:** users can independently opt in to emails when a reminder succeeds and when the last
   overdue stage requires manual follow-up.
-- **Available:** an active payment promise or a successful outbound conversation message in the previous
-  48 hours suppresses an otherwise-due automatic stage. The suppression is persisted so the same
-  stage is not retried later.
+- **Available:** an active collection hold, active payment promise, or successful outbound
+  conversation message in the previous 48 hours suppresses an otherwise-due automatic stage. The
+  suppression is persisted so the same stage is not retried later.
 
 The default reminder stages are:
 
@@ -140,8 +150,8 @@ An automatic reminder is eligible only when all of the following are true:
 6. At least one valid synchronized or additional customer email address exists.
 7. The stage has not already been delivered or suppressed, and another outbound delivery for the
    invoice is not pending.
-8. The invoice has no active payment promise and has not had a successful outbound message within
-   the previous 48 hours.
+8. The invoice has no active collection hold or active payment promise and has not had a successful
+   outbound message within the previous 48 hours.
 
 There is intentionally no catch-up scan: if the scheduler does not run on an exact stage date, that
 stage is skipped rather than sent late. A persisted failed scheduled-reminder stage also blocks an
@@ -164,6 +174,9 @@ The payment-promise lifecycle is implemented in the domain but has no ordinary-u
 - **Available after a promise exists:** follow-up messages use the same valid-recipient, active-Gmail,
   48-hour cooldown, pending-delivery, durable-ledger, retry, and stale-delivery protections as other
   outbound messages. Automatic reminders must be enabled for the follow-up to send.
+- **Available after a promise exists:** any active invoice collection hold pauses follow-up
+  refresh and delivery without fulfilling, cancelling, superseding, or failing the promise. Once
+  every hold is released, a still-active due promise is reconsidered by the hourly scheduler.
 - **Latent for users:** explicitly fulfill, cancel, supersede, or immediately enqueue a follow-up.
 
 The new manual recorder creates the received customer-reply ledger entry required by the domain and
@@ -180,6 +193,49 @@ multiple provider threads can belong to the same case.
 Conversation creation, resolution, and reopening are recorded as immutable audit facts with system,
 user, or future AI actor attribution. This event ledger does not execute actions or change invoices,
 promises, or email delivery state.
+
+### Action, hold, and escalation foundation
+
+The account-user Inbox now exposes the transport-neutral review foundation:
+
+- `ConversationAction` stores the proposal lifecycle and the exact approved or rejected revision.
+- `ConversationActionRevision` stores append-only proposal evidence, including the invoice and
+  customer context at the time of each revision, human-visible summary/rationale, structured
+  arguments, and proposed reply content.
+- `CollectionHold` is the source of truth for invoice-level automated-collection safety. Multiple
+  active holds coexist, each is released separately, and historical stage suppressions remain after
+  release.
+- `ConversationEscalation` stores open/resolved human-review work independently from holds.
+- Every transition writes a concise event to the existing append-only conversation ledger.
+
+This foundation does **not** classify messages, call an AI provider, generate replies, execute
+approved actions, refresh providers to answer questions, record promises from actions, resend
+invoices, add recipients, or automatically process disputes. It does not send action-generated
+email. A final locked eligibility handoff immediately before automated provider delivery lets a
+new hold stop a definitely-unsent owned delivery; a provider request whose handoff has already
+started cannot be recalled.
+
+### Future customer-specific AI learning boundary
+
+The action/revision/decision, hold, escalation, message, and event records preserve evidence for a
+future AI evaluation workflow, but PaymentReminder does not yet learn or change behavior per
+customer.
+
+A future PR 5/5B design must use bounded, customer-scoped strategy-insight candidates rather than
+one unbounded free-text memory field. Every candidate must cite immutable evidence IDs such as
+customer messages, action revisions, human edits/decisions, executed actions, and later outcomes;
+record confidence, model version, prompt version, creation time, and provenance; and follow a
+candidate → human-approved/rejected → retired/superseded lifecycle. AI must never silently activate,
+edit, or delete durable guidance.
+
+Only active, human-approved insight versions may later enter planning context, and every AI proposal
+must record the exact insight IDs and versions it read. Changed context before approval or execution
+must require re-planning or renewed approval. Explicit customer statements and human corrections
+outweigh inferred outcomes; payment after an email is correlation, not proof that the wording caused
+payment. Planning context must remain bounded. Learned tone, wording, or timing can never override
+provider invoice facts, disputes, collection holds, cooldowns, recipient validation, or
+deterministic execution policy. Customer identity remains provider-scoped, so insights must not be
+merged across `Customer` records without a separate identity-merging feature.
 
 `ConversationMessage` supports these kinds:
 
@@ -203,7 +259,8 @@ manual replies are available in the account-user Conversation Inbox.
 - The application has durable records for webhook events, delivery failures, reminder
   suppressions, sessions, external identities, provider data, and synchronization errors, but no
   user-facing diagnostic console.
-- Ordinary users have no one-off reminder, resend, failed-stage retry, or manual payment-promise UI.
+- Ordinary users have no one-off reminder, deterministic action execution, resend, failed-stage
+  retry, or manual payment-promise UI.
 
 ## Platform administrator panel
 

@@ -1,0 +1,158 @@
+<section class="app-card app-conversation-panel" aria-label="Proposed actions">
+  <h2 class="app-card__title">Proposed actions</h2>
+  <p class="app-card__description">
+    Approval records a human decision only. It does not send, execute, or change invoice facts.
+  </p>
+
+  <% if actions.empty? %>
+    <p class="app-card__description">No actions have been proposed.</p>
+  <% end %>
+
+  <% actions.each do |action| %>
+    <% revision = action.current_revision %>
+    <article class="app-work-item app-action" id="conversation-action-<%= action.id %>">
+      <header class="app-work-item__header">
+        <strong><%= action.action_type.humanize %></strong>
+        <span class="app-inbox-chip"><%= action.status.humanize %></span>
+      </header>
+      <dl class="app-evidence-list">
+        <div><dt>Origin</dt><dd><%= action.origin_kind.humanize %></dd></div>
+        <div><dt>Current revision</dt><dd><%= revision.revision_number %></dd></div>
+        <div><dt>Summary</dt><dd><%= revision.user_facing_summary %></dd></div>
+        <% if revision.rationale.present? %>
+          <div><dt>Rationale</dt><dd><%= revision.rationale %></dd></div>
+        <% end %>
+        <% if revision.proposed_reply.present? %>
+          <div>
+            <dt>Proposed reply</dt>
+            <dd>
+              <strong><%= revision.proposed_reply["subject"] %></strong>
+              <%= simple_format(revision.proposed_reply["body"]) %>
+            </dd>
+          </div>
+        <% end %>
+        <% if revision.arguments.present? %>
+          <div>
+            <dt>Structured arguments</dt>
+            <dd>
+              <ul>
+                <% revision.arguments.each do |key, value| %>
+                  <li><strong><%= key.humanize %>:</strong> <%= value %></li>
+                <% end %>
+              </ul>
+            </dd>
+          </div>
+        <% end %>
+      </dl>
+
+      <details>
+        <summary>Revision history</summary>
+        <ol class="app-history-list">
+          <% action.revisions.reverse_each do |historical| %>
+            <li>
+              Revision <%= historical.revision_number %>:
+              <%= historical.user_facing_summary %>
+              <% if historical.author_user %>
+                by <%= historical.author_user.name %>
+              <% end %>
+              at <%= l(historical.created_at, format: :short) %>
+            </li>
+          <% end %>
+        </ol>
+      </details>
+
+      <% if action.status_pending_approval? %>
+        <% revision_key = SecureRandom.uuid %>
+        <details>
+          <summary>Edit human-visible proposal</summary>
+          <%= form_with url: conversation_action_revisions_path(
+            conversation,
+            action
+          ), scope: :revision do |form| %>
+            <%= form.hidden_field :idempotency_key, value: revision_key %>
+            <%= form.hidden_field :base_revision_id, value: revision.id %>
+            <%= form.hidden_field :action_snapshot,
+              value: ConversationActions::ActionSnapshot.token_for(
+                action:,
+                idempotency_key: revision_key
+              ) %>
+            <%= form.label :user_facing_summary, "Summary", class: "app-field-label" %>
+            <%= form.text_area :user_facing_summary,
+              value: revision.user_facing_summary,
+              required: true,
+              maxlength: ConversationActionRevision::MAXIMUM_SUMMARY_LENGTH,
+              rows: 3,
+              class: "app-textarea" %>
+            <%= form.label :rationale, "Rationale", class: "app-field-label" %>
+            <%= form.text_area :rationale,
+              value: revision.rationale,
+              maxlength: ConversationActionRevision::MAXIMUM_RATIONALE_LENGTH,
+              rows: 3,
+              class: "app-textarea" %>
+            <%= form.label :proposed_reply_subject, "Reply subject", class: "app-field-label" %>
+            <%= form.text_field :proposed_reply_subject,
+              value: revision.proposed_reply["subject"],
+              maxlength: 1_000,
+              class: "app-input" %>
+            <%= form.label :proposed_reply_body, "Reply body", class: "app-field-label" %>
+            <%= form.text_area :proposed_reply_body,
+              value: revision.proposed_reply["body"],
+              maxlength: 10_000,
+              rows: 6,
+              class: "app-textarea" %>
+            <%= form.submit "Save new revision", class: "app-secondary-button" %>
+          <% end %>
+        </details>
+
+        <% approval_key = SecureRandom.uuid %>
+        <%= form_with url: conversation_action_approval_path(
+          conversation,
+          action
+        ), scope: :approval, class: "app-inline-form" do |form| %>
+          <%= form.hidden_field :revision_id, value: revision.id %>
+          <%= form.hidden_field :idempotency_key, value: approval_key %>
+          <%= form.hidden_field :action_snapshot,
+            value: ConversationActions::ActionSnapshot.token_for(
+              action:,
+              idempotency_key: approval_key
+            ) %>
+          <%= form.label :note, "Approval note (optional)", class: "app-field-label" %>
+          <%= form.text_field :note, maxlength: 2_000, class: "app-input" %>
+          <%= form.submit "Approve revision #{revision.revision_number}",
+            class: "app-primary-button" %>
+        <% end %>
+
+        <% rejection_key = SecureRandom.uuid %>
+        <%= form_with url: conversation_action_rejection_path(
+          conversation,
+          action
+        ), scope: :rejection, class: "app-inline-form" do |form| %>
+          <%= form.hidden_field :revision_id, value: revision.id %>
+          <%= form.hidden_field :idempotency_key, value: rejection_key %>
+          <%= form.hidden_field :action_snapshot,
+            value: ConversationActions::ActionSnapshot.token_for(
+              action:,
+              idempotency_key: rejection_key
+            ) %>
+          <%= form.label :rationale, "Why reject this proposal?", class: "app-field-label" %>
+          <%= form.text_field :rationale,
+            required: true,
+            maxlength: 2_000,
+            class: "app-input" %>
+          <%= form.submit "Reject revision #{revision.revision_number}",
+            class: "app-secondary-button" %>
+        <% end %>
+      <% else %>
+        <p class="app-card__description">
+          Revision <%= action.decided_revision.revision_number %>
+          was <%= action.status %>
+          by <%= action.decided_by_user&.name || "a former account user" %>
+          at <%= l(action.decided_at, format: :short) %>.
+          <% if action.decision_note.present? %>
+            <%= action.decision_note %>
+          <% end %>
+        </p>
+      <% end %>
+    </article>
+  <% end %>
+</section>

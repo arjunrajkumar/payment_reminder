@@ -68,10 +68,23 @@ class PaymentPromises::FollowUpDecision
 
     invoice_resolution = resolution_for(invoice)
     return resolved(invoice_resolution, invoice:, message:) if invoice_resolution
+    holds = invoice.active_collection_holds.reorder(:id).to_a
+    if holds.any?
+      return skipped(
+        :active_collection_hold,
+        invoice:,
+        message:,
+        collection_hold_ids: holds.map(&:id),
+        collection_hold_reasons: holds.map(&:reason).uniq
+      )
+    end
     return ready(invoice:, message:) unless check_delivery?
 
     if message && !message.delivery_owned_by?(delivery_job_id)
       return skipped(:outbound_delivery_in_progress, invoice:, message:)
+    end
+    if recently_contacted?(invoice, excluding: message)
+      return skipped(:recent_outbound_message, invoice:, message:)
     end
 
     account = payment_promise.account.reload
@@ -86,7 +99,6 @@ class PaymentPromises::FollowUpDecision
     end
 
     unless message
-      return skipped(:recent_outbound_message, invoice:) if recently_contacted?(invoice)
       if invoice.conversation_messages.direction_outbound.status_pending.lock.exists?
         return skipped(:outbound_delivery_in_progress, invoice:)
       end
@@ -120,11 +132,12 @@ class PaymentPromises::FollowUpDecision
       invoice.status_open? && invoice.amount_due.present? && !invoice.amount_due.to_d.positive?
     end
 
-    def recently_contacted?(invoice)
-      invoice.conversation_messages
+    def recently_contacted?(invoice, excluding:)
+      scope = invoice.conversation_messages
         .successful_outbound
         .sent_after(ConversationMessage::OUTBOUND_CONTACT_COOLDOWN.ago)
-        .exists?
+      scope = scope.where.not(id: excluding.id) if excluding
+      scope.exists?
     end
 
     def ready(invoice:, message:, connection: nil)

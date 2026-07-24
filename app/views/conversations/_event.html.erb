@@ -4,4 +4,7 @@
     <span>by <%= event.actor_user.name %></span>
   <% end %>
   <time datetime="<%= event.created_at.iso8601 %>"><%= l(event.created_at, format: :short) %></time>
+  <% if (detail = conversation_event_detail(event)) %>
+    <span class="app-conversation-event__detail"><%= detail %></span>
+  <% end %>
 </div>

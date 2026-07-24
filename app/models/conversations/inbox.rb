@@ -5,7 +5,10 @@ class Conversations::Inbox
     :conversation,
     :latest_message,
     :latest_inbound_sender,
-    :needs_review
+    :needs_review,
+    :collection_held,
+    :latest_activity_at,
+    :workflow_summary
   )
 
   class << self
@@ -37,13 +40,43 @@ class Conversations::Inbox
         root_by_conversation_id:,
         direction: :inbound
       )
+      workflow_conversation_ids = root_by_conversation_id.keys
+      held_root_ids = account.collection_holds
+        .status_active
+        .where(conversation_id: workflow_conversation_ids)
+        .distinct
+        .pluck(:conversation_id)
+        .filter_map { |id| root_by_conversation_id[id] }
+        .to_set
+      actions_by_root = account.conversation_actions
+        .where(conversation_id: workflow_conversation_ids)
+        .includes(:revisions)
+        .group_by { |action| root_by_conversation_id[action.conversation_id] }
+      escalations_by_root = account.conversation_escalations
+        .where(conversation_id: workflow_conversation_ids)
+        .group_by { |escalation| root_by_conversation_id[escalation.conversation_id] }
+      holds_by_root = account.collection_holds
+        .where(conversation_id: workflow_conversation_ids)
+        .group_by { |hold| root_by_conversation_id[hold.conversation_id] }
 
       records.map do |conversation|
+        latest_message = latest_by_root[conversation.id]
+        workflow_item = latest_workflow_item(
+          actions: actions_by_root[conversation.id],
+          escalations: escalations_by_root[conversation.id],
+          holds: holds_by_root[conversation.id]
+        )
         Entry.new(
           conversation:,
-          latest_message: latest_by_root[conversation.id],
+          latest_message:,
           latest_inbound_sender: latest_inbound_by_root[conversation.id]&.from_address,
-          needs_review: review_root_ids.include?(conversation.id)
+          needs_review: review_root_ids.include?(conversation.id),
+          collection_held: held_root_ids.include?(conversation.id),
+          latest_activity_at: [
+            latest_message&.occurred_at,
+            workflow_item&.fetch(:occurred_at)
+          ].compact.max,
+          workflow_summary: workflow_item&.fetch(:summary)
         )
       end
     end
@@ -94,6 +127,30 @@ class Conversations::Inbox
           .index_by(&:id)
         message_ids_by_root.transform_values { |id| messages_by_id.fetch(id) }
       end
+
+      def latest_workflow_item(actions:, escalations:, holds:)
+        items = [
+          *Array(actions).map do |action|
+            {
+              occurred_at: action.updated_at,
+              summary: action.current_revision.user_facing_summary
+            }
+          end,
+          *Array(escalations).map do |escalation|
+            {
+              occurred_at: escalation.updated_at,
+              summary: escalation.summary
+            }
+          end,
+          *Array(holds).map do |hold|
+            {
+              occurred_at: hold.updated_at,
+              summary: "#{hold.reason.humanize} collection hold"
+            }
+          end
+        ]
+        items.max_by { |item| item.fetch(:occurred_at) }
+      end
   end
 
   def initialize(account:, filter:)
@@ -105,8 +162,11 @@ class Conversations::Inbox
   def relation
     scoped = account.conversations
       .where(canonical_conversation_id: nil)
-      .where(message_exists_sql)
       .where(visible_review_owner_sql)
+    scoped = scoped.where(message_exists_sql).or(
+      scoped.where(workflow_exists_sql)
+    )
+    scoped = scoped
       .select(
         "conversations.*",
         "(#{latest_message_at_sql}) AS inbox_latest_message_at",
@@ -159,6 +219,23 @@ class Conversations::Inbox
       SQL
     end
 
+    def workflow_exists_sql
+      <<~SQL.squish
+        EXISTS (
+          SELECT 1 FROM conversation_actions
+          WHERE conversation_actions.conversation_id = conversations.id
+        )
+        OR EXISTS (
+          SELECT 1 FROM collection_holds
+          WHERE collection_holds.conversation_id = conversations.id
+        )
+        OR EXISTS (
+          SELECT 1 FROM conversation_escalations
+          WHERE conversation_escalations.conversation_id = conversations.id
+        )
+      SQL
+    end
+
     def visible_review_owner_sql
       Conversations::ReviewWorkUnit.visible_owner_sql(
         conversation_alias: "conversations"
@@ -167,15 +244,31 @@ class Conversations::Inbox
 
     def latest_message_at_sql
       <<~SQL.squish
-        SELECT MAX(
-          COALESCE(
-            inbox_messages.received_at,
-            inbox_messages.sent_at,
-            inbox_messages.created_at
-          )
+        GREATEST(
+          COALESCE((
+            SELECT MAX(
+              COALESCE(
+                inbox_messages.received_at,
+                inbox_messages.sent_at,
+                inbox_messages.created_at
+              )
+            )
+            FROM conversation_messages AS inbox_messages
+            WHERE #{group_membership_sql}
+          ), '1970-01-01'),
+          COALESCE((
+            SELECT MAX(updated_at) FROM conversation_actions
+            WHERE conversation_actions.conversation_id = conversations.id
+          ), '1970-01-01'),
+          COALESCE((
+            SELECT MAX(updated_at) FROM collection_holds
+            WHERE collection_holds.conversation_id = conversations.id
+          ), '1970-01-01'),
+          COALESCE((
+            SELECT MAX(updated_at) FROM conversation_escalations
+            WHERE conversation_escalations.conversation_id = conversations.id
+          ), '1970-01-01')
         )
-        FROM conversation_messages AS inbox_messages
-        WHERE #{group_membership_sql}
       SQL
     end
 

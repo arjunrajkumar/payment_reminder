@@ -12,19 +12,25 @@
     </div>
 
     <div class="app-conversation-row__summary">
-      <strong><%= message.subject.presence || "No subject" %></strong>
-      <span><%= truncate(message.body.to_s.squish, length: 120) %></span>
+      <strong><%= message&.subject.presence || "Collection work item" %></strong>
+      <span><%= truncate(
+        message&.body.to_s.squish.presence || entry.workflow_summary.to_s,
+        length: 120
+      ) %></span>
     </div>
 
     <div class="app-conversation-row__meta">
-      <time datetime="<%= message.occurred_at.iso8601 %>">
-        <%= l(message.occurred_at, format: :short) %>
+      <time datetime="<%= entry.latest_activity_at.iso8601 %>">
+        <%= l(entry.latest_activity_at, format: :short) %>
       </time>
       <% if conversation.attention_required_at? %>
         <span class="app-inbox-chip app-inbox-chip--attention">Needs attention</span>
       <% end %>
       <% if entry.needs_review %>
         <span class="app-inbox-chip">Needs review</span>
+      <% end %>
+      <% if entry.collection_held %>
+        <span class="app-inbox-chip app-inbox-chip--paused">Collection paused</span>
       <% end %>
     </div>
   <% end %>

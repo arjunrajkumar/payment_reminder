@@ -78,6 +78,20 @@ class PaymentPromises::FollowUpDecisionTest < ActiveSupport::TestCase
     end
   end
 
+  test "an active hold pauses before refresh and again at locked delivery" do
+    hold = place_hold
+
+    travel_to follow_up_time do
+      preflight = before_refresh
+      delivery = for_delivery
+
+      assert_equal "active_collection_hold", preflight.reason
+      assert_equal "active_collection_hold", delivery.reason
+      assert_equal [ hold.id ], preflight.context.fetch(:collection_hold_ids)
+      assert_predicate @payment_promise.reload, :status_active?
+    end
+  end
+
   private
     def before_refresh
       PaymentPromises::FollowUpDecision.before_refresh(payment_promise: @payment_promise.reload)
@@ -138,5 +152,15 @@ class PaymentPromises::FollowUpDecisionTest < ActiveSupport::TestCase
 
     def follow_up_time
       Time.zone.local(2026, 8, 4, 9)
+    end
+
+    def place_hold
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :manual,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "follow-up-decision-hold"
+      )
     end
 end

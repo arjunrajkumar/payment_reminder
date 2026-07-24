@@ -68,6 +68,80 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     end
   end
 
+  test "an owned retry is cancelled when another confirmed contact is newer" do
+    travel_to follow_up_time do
+      first = reserve
+      recent = create_contact(
+        status: :sent,
+        sent_at: 1.hour.ago,
+        provider_message_id: "newer-confirmed-contact"
+      )
+
+      retry_result = reserve
+
+      assert_not_predicate retry_result, :reserved?
+      assert_equal "recent_outbound_message", retry_result.reason
+      assert_predicate first.message.reload, :status_failed?
+      assert_nil @payment_promise.reload.follow_up_message
+      assert_predicate @payment_promise, :status_active?
+      assert_predicate recent, :status_sent?
+    end
+  end
+
+  test "an owned retry is cancelled when another uncertain contact is newer" do
+    travel_to follow_up_time do
+      first = reserve
+      create_contact(
+        status: :failed,
+        delivery_uncertain: true,
+        provider_delivery_started_at: 1.hour.ago,
+        failure_reason: "Provider response was lost."
+      )
+
+      retry_result = reserve
+
+      assert_not_predicate retry_result, :reserved?
+      assert_equal "recent_outbound_message", retry_result.reason
+      assert_predicate first.message.reload, :status_failed?
+      assert_nil @payment_promise.reload.follow_up_message
+      assert_predicate @payment_promise, :status_active?
+    end
+  end
+
+  test "an owned retry is allowed at the exact cooldown boundary" do
+    travel_to follow_up_time do
+      first = reserve
+      create_contact(
+        status: :sent,
+        sent_at: 48.hours.ago,
+        provider_message_id: "boundary-confirmed-contact"
+      )
+
+      retry_result = reserve
+
+      assert_predicate retry_result, :reserved?
+      assert_equal first.message, retry_result.message
+    end
+  end
+
+  test "a foreign job cannot cancel another job's pending follow-up" do
+    travel_to follow_up_time do
+      first = reserve
+      create_contact(
+        status: :sent,
+        sent_at: 1.hour.ago,
+        provider_message_id: "foreign-job-newer-contact"
+      )
+
+      foreign = reserve(delivery_job_id: "foreign-job")
+
+      assert_not_predicate foreign, :reserved?
+      assert_equal "outbound_delivery_in_progress", foreign.reason
+      assert_predicate first.message.reload, :status_pending?
+      assert_equal first.message, @payment_promise.reload.follow_up_message
+    end
+  end
+
   test "authoritatively resolves a paid promise instead of reserving delivery" do
     @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.current)
 
@@ -94,6 +168,20 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     assert_not_predicate @reservation, :reserved?
     assert_equal "disabled_account", @reservation.reason
     assert_predicate @payment_promise.reload, :status_active?
+  end
+
+  test "does not reserve or resolve an active promise while collection is held" do
+    place_hold
+
+    travel_to follow_up_time do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
+        @reservation = reserve
+      end
+    end
+
+    assert_equal "active_collection_hold", @reservation.reason
+    assert_predicate @payment_promise.reload, :status_active?
+    assert_nil @payment_promise.follow_up_message
   end
 
   private
@@ -125,7 +213,44 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
       )
     end
 
+    def create_contact(
+      status:,
+      sent_at: nil,
+      provider_message_id: nil,
+      delivery_uncertain: false,
+      provider_delivery_started_at: nil,
+      failure_reason: nil
+    )
+      @invoice.conversation_messages.create!(
+        account: @account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        direction: :outbound,
+        kind: :invoice_resend,
+        status:,
+        sent_at:,
+        provider_message_id:,
+        delivery_uncertain:,
+        provider_delivery_started_at:,
+        failure_reason:,
+        from_address: "billing@paymentreminder.example",
+        to_addresses: [ "customer@example.com" ],
+        cc_addresses: [],
+        subject: "Invoice INV-001",
+        body: "Here is the invoice."
+      )
+    end
+
     def follow_up_time
       Time.zone.local(2026, 8, 4, 9)
+    end
+
+    def place_hold
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :manual,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "promise-reservation-hold"
+      )
     end
 end

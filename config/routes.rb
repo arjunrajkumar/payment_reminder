@@ -16,6 +16,24 @@ Rails.application.routes.draw do
       resources :reviews, only: :update, param: :message_id
       resources :replies, only: :create
       resource :acknowledgement, only: :create
+      resources :actions, only: [] do
+        scope module: :actions do
+          resources :revisions, only: :create
+          resource :approval, only: :create
+          resource :rejection, only: :create
+        end
+      end
+      resources :collection_holds, only: :create do
+        scope module: :collection_holds do
+          resource :release, only: :create
+        end
+      end
+      resources :escalations, only: :create do
+        scope module: :escalations do
+          resource :resolution, only: :create
+          resource :reopening, only: :create
+        end
+      end
     end
   end
   resources :customers, only: [] do

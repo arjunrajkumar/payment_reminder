@@ -3,6 +3,7 @@ require "monitor"
 class EmailConnection::MailboxThreadLock
   TIMEOUT_SECONDS = 10
   POLL_INTERVAL_SECONDS = 0.01
+  HELD_LOCKS_KEY = :email_connection_mailbox_thread_locks
 
   class Unavailable < EmailConnection::Errors::TemporaryProviderError; end
 
@@ -15,32 +16,42 @@ class EmailConnection::MailboxThreadLock
       ]
       return yield if identity.any?(&:blank?)
 
-      lock_name = lock_name_for(identity)
-      local_lock = checkout_local_lock(lock_name)
-      local_lock_entered = false
-      begin
-        local_lock_entered = acquire_local_lock(local_lock)
-        unless local_lock_entered
-          raise Unavailable, "mailbox thread lock could not be acquired"
+      ActiveRecord::Base.connection_pool.with_connection do |connection|
+        lock_name = lock_name_for(
+          identity,
+          namespace: connection.current_database
+        )
+        if held_lock?(lock_name)
+          return with_held_lock(lock_name) { yield }
         end
 
-        ActiveRecord::Base.connection_pool.with_connection do |connection|
-          acquired = connection.select_value(
-            "SELECT GET_LOCK(#{connection.quote(lock_name)}, #{TIMEOUT_SECONDS})"
-          ).to_i == 1
+        local_lock = checkout_local_lock(lock_name)
+        local_lock_entered = false
+        begin
+          local_lock_entered = acquire_local_lock(local_lock)
+          unless local_lock_entered
+            raise Unavailable, "mailbox thread lock could not be acquired"
+          end
+
+          acquired = connection.uncached do
+            connection.select_value(
+              "SELECT GET_LOCK(" \
+                "#{connection.quote(lock_name)}, #{TIMEOUT_SECONDS})"
+            ).to_i == 1
+          end
           raise Unavailable, "mailbox thread lock could not be acquired" unless acquired
 
           begin
-            yield
+            with_held_lock(lock_name) { yield }
           ensure
-            connection.select_value(
-              "SELECT RELEASE_LOCK(#{connection.quote(lock_name)})"
-            )
+            connection.uncached do
+              release_server_lock(connection, lock_name)
+            end
           end
+        ensure
+          local_lock.exit if local_lock_entered
+          checkin_local_lock(lock_name, local_lock)
         end
-      ensure
-        local_lock.exit if local_lock_entered
-        checkin_local_lock(lock_name, local_lock)
       end
     end
 
@@ -71,6 +82,44 @@ class EmailConnection::MailboxThreadLock
         true
       end
 
+      def release_server_lock(connection, lock_name)
+        connection_id = connection.select_value("SELECT CONNECTION_ID()").to_i
+        loop do
+          connection.select_value(
+            "SELECT RELEASE_LOCK(#{connection.quote(lock_name)})"
+          )
+          owner_id = connection.select_value(
+            "SELECT IS_USED_LOCK(#{connection.quote(lock_name)})"
+          )
+          break unless owner_id.to_i == connection_id
+        end
+      end
+
+      def held_lock?(lock_name)
+        held_locks.fetch(lock_name, 0).positive?
+      end
+
+      def with_held_lock(lock_name)
+        held_locks[lock_name] = held_locks.fetch(lock_name, 0) + 1
+        yield
+      ensure
+        remaining = held_locks.fetch(lock_name) - 1
+        if remaining.zero?
+          held_locks.delete(lock_name)
+          Thread.current.thread_variable_set(HELD_LOCKS_KEY, nil) if
+            held_locks.empty?
+        else
+          held_locks[lock_name] = remaining
+        end
+      end
+
+      def held_locks
+        Thread.current.thread_variable_get(HELD_LOCKS_KEY) ||
+          {}.tap do |locks|
+            Thread.current.thread_variable_set(HELD_LOCKS_KEY, locks)
+          end
+      end
+
       def local_locks
         @local_locks ||= {}
       end
@@ -79,8 +128,11 @@ class EmailConnection::MailboxThreadLock
         @local_locks_guard ||= Mutex.new
       end
 
-      def lock_name_for(identity)
-        digest = Digest::SHA256.hexdigest(identity.join(":"))
+      def lock_name_for(identity, namespace:)
+        account_id, provider_account_id, = identity
+        digest = Digest::SHA256.hexdigest(
+          [ namespace, account_id, provider_account_id ].join(":")
+        )
         "payment-reminder:mailbox-thread:#{digest.first(24)}"
       end
   end

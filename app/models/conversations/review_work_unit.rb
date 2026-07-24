@@ -1,4 +1,11 @@
 class Conversations::ReviewWorkUnit
+  class SplitInvoiceWorkUnit < StandardError; end
+  WorkflowSnapshot = Data.define(
+    :owner_id,
+    :conversation_ids,
+    :message_ids
+  )
+
   class << self
     def message_scope_for(message:)
       key = review_key(message)
@@ -38,6 +45,102 @@ class Conversations::ReviewWorkUnit
         .pluck(:conversation_id)
     end
 
+    def workflow_owner_for(conversation:)
+      root = conversation.canonical
+      account = root.account
+      keys = review_keys(
+        account.conversation_messages.where(
+          conversation_id: root.conversation_group_ids
+        )
+      )
+      return root if keys.empty?
+
+      root_ids = thread_scope(account:, keys:)
+        .joins(:conversation)
+        .where(review_required: true)
+        .where.not(email_connection_id: nil)
+        .distinct
+        .pluck(
+          Arel.sql(
+            "COALESCE(conversations.canonical_conversation_id, conversations.id)"
+          )
+        )
+      candidates = account.conversations.where(id: root_ids).to_a
+      invoice_candidates = candidates.select { |candidate| candidate.invoice_id }
+      if invoice_candidates.map(&:invoice_id).uniq.many?
+        raise SplitInvoiceWorkUnit,
+          "A Gmail review thread cannot belong to multiple invoices."
+      end
+      candidates.min_by { |candidate| [ candidate.invoice_id ? 0 : 1, candidate.id ] } ||
+        root
+    end
+
+    def reconcile_workflow_owner!(conversation:)
+      with_reconciled_workflow_owner(conversation:) { |owner| owner }
+    end
+
+    def with_reconciled_workflow_owner(conversation:, at: Time.current)
+      account = conversation.account
+      keys = mailbox_keys_for_lock(
+        account:,
+        conversation_id: conversation.id
+      )
+      with_mailbox_thread_locks(account:, keys:) do
+        Receivables::AccountLock.synchronize(account:) do
+          Conversation.transaction(requires_new: true) do
+            current = lock_current_workflow_snapshot(
+              account:,
+              conversation_id: conversation.id
+            )
+            owner = account.conversations.lock.find(current.owner_id)
+            reconcile_workflow_records!(
+              owner:,
+              workflow_snapshot: current
+            )
+            yielded = yield(owner, current)
+            Conversations::Attention.recompute!(conversation: owner, at:)
+            yielded
+          end
+        end
+      end
+    end
+
+    def invoice_owner_ids_for(message:)
+      key = review_key(message)
+      return [] unless key
+
+      thread_scope(account: message.account, keys: [ key ])
+        .joins(<<~SQL.squish)
+          INNER JOIN conversations
+            ON conversations.id = conversation_messages.conversation_id
+          INNER JOIN conversations AS review_conversation_roots
+            ON review_conversation_roots.id = COALESCE(
+              conversations.canonical_conversation_id,
+              conversations.id
+            )
+        SQL
+        .where(review_required: true)
+        .where.not(review_conversation_roots: { invoice_id: nil })
+        .distinct
+        .pluck("review_conversation_roots.id")
+    end
+
+    def workflow_conversation_ids_for(conversation:)
+      owner = workflow_owner_for(conversation:)
+      (
+        conversation_ids_for(conversation: owner) +
+        owner.conversation_group_ids
+      ).uniq
+    end
+
+    def same_work_unit?(left:, right:)
+      return false unless left.account_id == right.account_id
+
+      left_ids = workflow_conversation_ids_for(conversation: left)
+      right_ids = workflow_conversation_ids_for(conversation: right)
+      (left_ids & right_ids).any?
+    end
+
     def includes_message?(conversation:, message:)
       return false unless conversation.account_id == message.account_id
 
@@ -51,6 +154,195 @@ class Conversations::ReviewWorkUnit
         .pluck(:id)
         .then { |ids| (ids + [ message.conversation_id ]).uniq.sort }
     end
+
+    private
+      def mailbox_keys_for_lock(account:, conversation_id:)
+        requested = account.conversations.find(conversation_id)
+        root = requested.canonical
+        review_keys(
+          account.conversation_messages.where(
+            conversation_id: root.conversation_group_ids
+          )
+        ).sort
+      end
+
+      def with_mailbox_thread_locks(account:, keys:, &block)
+        key = keys.first
+        return yield if key.nil?
+
+        provider_account_id, provider_thread_id = key
+        EmailConnection::MailboxThreadLock.synchronize(
+          account:,
+          provider_account_id:,
+          provider_thread_id:
+        ) do
+          with_mailbox_thread_locks(
+            account:,
+            keys: keys.drop(1),
+            &block
+          )
+        end
+      end
+
+      def lock_current_workflow_snapshot(account:, conversation_id:)
+        requested = account.conversations.lock.find(conversation_id)
+        requested_root_id = requested.canonical_conversation_id || requested.id
+        requested_group = lock_conversation_group(
+          account:,
+          root_id: requested_root_id
+        )
+        requested_keys = lock_review_messages(
+          account:,
+          conversation_ids: requested_group.map(&:id)
+        ).map { |message| review_key(message) }.compact.uniq
+        if requested_keys.empty?
+          return WorkflowSnapshot.new(
+            owner_id: requested_root_id,
+            conversation_ids: requested_group.map(&:id).sort,
+            message_ids: lock_group_message_ids(
+              account:,
+              conversation_ids: requested_group.map(&:id)
+            )
+          )
+        end
+
+        thread_messages = lock_thread_review_messages(
+          account:,
+          keys: requested_keys
+        )
+        candidate_conversations = account.conversations
+          .where(id: thread_messages.map(&:conversation_id).uniq)
+          .order(:id)
+          .lock
+          .to_a
+        candidate_root_ids = candidate_conversations.map do |candidate|
+          candidate.canonical_conversation_id || candidate.id
+        end.uniq
+        candidates = account.conversations
+          .where(id: candidate_root_ids)
+          .order(:id)
+          .lock
+          .to_a
+        invoice_candidates = candidates.select { |candidate| candidate.invoice_id }
+        if invoice_candidates.map(&:invoice_id).uniq.many?
+          raise SplitInvoiceWorkUnit,
+            "A Gmail review thread cannot belong to multiple invoices."
+        end
+        owner = candidates.min_by do |candidate|
+          [ candidate.invoice_id ? 0 : 1, candidate.id ]
+        end || requested
+        owner_group = lock_conversation_group(account:, root_id: owner.id)
+        owner_group_ids = owner_group.map(&:id)
+        owner_keys = lock_review_messages(
+          account:,
+          conversation_ids: owner_group_ids
+        ).map { |message| review_key(message) }.compact.uniq
+        owner_thread_messages = lock_thread_review_messages(
+          account:,
+          keys: owner_keys
+        )
+        unlinked_ids = account.conversations
+          .where(id: owner_thread_messages.map(&:conversation_id).uniq)
+          .where(invoice_id: nil, canonical_conversation_id: nil)
+          .order(:id)
+          .lock
+          .pluck(:id)
+        conversation_ids = (owner_group_ids + unlinked_ids).uniq.sort
+        sibling_message_ids = lock_thread_message_ids(
+          account:,
+          keys: owner_keys,
+          conversation_ids: unlinked_ids
+        )
+        WorkflowSnapshot.new(
+          owner_id: owner.id,
+          conversation_ids:,
+          message_ids: (
+            lock_group_message_ids(
+              account:,
+              conversation_ids: owner_group_ids
+            ) + sibling_message_ids
+          ).uniq.sort
+        )
+      end
+
+      def lock_conversation_group(account:, root_id:)
+        account.conversations
+          .where(id: root_id)
+          .or(account.conversations.where(canonical_conversation_id: root_id))
+          .order(:id)
+          .lock
+          .to_a
+      end
+
+      def lock_review_messages(account:, conversation_ids:)
+        account.conversation_messages
+          .where(conversation_id: conversation_ids, review_required: true)
+          .where.not(
+            provider_account_id: nil,
+            provider_thread_id: nil
+          )
+          .order(:id)
+          .lock
+          .to_a
+      end
+
+      def lock_thread_review_messages(account:, keys:)
+        return [] if keys.empty?
+
+        thread_scope(account:, keys:)
+          .where(review_required: true)
+          .where.not(email_connection_id: nil)
+          .order(:id)
+          .lock
+          .to_a
+      end
+
+      def lock_group_message_ids(account:, conversation_ids:)
+        account.conversation_messages
+          .where(conversation_id: conversation_ids)
+          .order(:id)
+          .lock
+          .pluck(:id)
+      end
+
+      def lock_thread_message_ids(account:, keys:, conversation_ids:)
+        return [] if keys.empty? || conversation_ids.empty?
+
+        thread_scope(account:, keys:)
+          .where(conversation_id: conversation_ids)
+          .order(:id)
+          .lock
+          .pluck(:id)
+      end
+
+      def reconcile_workflow_records!(owner:, workflow_snapshot:)
+        owner.account.conversation_actions
+          .where(conversation_id: workflow_snapshot.conversation_ids)
+          .where.not(conversation_id: owner.id)
+          .order(:id)
+          .lock
+          .each do |action|
+            action.send(
+              :transfer_to_conversation!,
+              owner,
+              validated_message_ids: workflow_snapshot.message_ids
+            )
+          end
+        owner.account.conversation_escalations
+          .where(conversation_id: workflow_snapshot.conversation_ids)
+          .where.not(conversation_id: owner.id)
+          .order(:id)
+          .lock
+          .each do |escalation|
+            escalation.send(
+              :transfer_to_conversation!,
+              owner,
+              validated_message_ids: workflow_snapshot.message_ids
+            )
+          end
+      end
+
+    public
 
     def expand_root_mapping(account:, root_by_conversation_id:)
       root_ids = root_by_conversation_id.values.uniq

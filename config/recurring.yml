@@ -25,6 +25,9 @@ production:
   reconcile_pending_conversation_messages:
     class: ConversationMessages::ReconcilePendingDeliveriesJob
     schedule: every hour at minute 40
+  reconcile_invoice_reminder_notifications:
+    class: InvoiceReminders::ReconcileNotificationDeliveriesJob
+    schedule: every 15 minutes
   poll_gmail_inbound:
     class: EmailConnections::PollInboundJob
     schedule: every 15 minutes

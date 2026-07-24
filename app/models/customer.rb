@@ -14,6 +14,7 @@ class Customer < ApplicationRecord
     inverse_of: :customer
 
   before_validation :assign_initial_customer_segment, on: :create
+  before_destroy :release_optional_workflow_snapshots, prepend: true
 
   validates :external_id, :name, presence: true
   validates :external_id, uniqueness: { scope: :invoice_source_id }
@@ -33,6 +34,15 @@ class Customer < ApplicationRecord
   end
 
   private
+    def release_optional_workflow_snapshots
+      ConversationActionRevision.where(customer_id: id)
+        .update_all(customer_id: nil)
+      CollectionHold.where(customer_id: id)
+        .update_all(customer_id: nil)
+      ConversationEscalation.where(customer_id: id)
+        .update_all(customer_id: nil)
+    end
+
     def assign_initial_customer_segment
       self.customer_segment ||= account&.customer_segment(:normal_debtor)
     end

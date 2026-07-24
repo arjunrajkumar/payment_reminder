@@ -140,6 +140,46 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     assert_predicate @payment_promise.reload, :status_active?
   end
 
+  test "a collection hold pauses before provider refresh and leaves the promise active" do
+    place_hold("promise-job-hold")
+    InvoiceReminders::InvoiceFreshnessCheck.expects(:call).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+
+    travel_to follow_up_time do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
+        PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
+      end
+    end
+
+    assert_predicate @payment_promise.reload, :status_active?
+    assert_nil @payment_promise.follow_up_message
+  end
+
+  test "a hold detaches an owned unsent retry and release permits one replacement" do
+    job = PaymentPromises::FollowUpJob.new(@payment_promise.id)
+    pending = create_pending_follow_up(delivery_job_id: job.job_id)
+    hold = place_hold("promise-retry-hold")
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+
+    travel_to follow_up_time do
+      job.perform_now
+    end
+
+    assert_predicate pending.reload, :status_failed?
+    assert_predicate @payment_promise.reload, :status_active?
+    assert_nil @payment_promise.follow_up_message
+
+    release_hold(hold)
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).once
+      .returns(@delivery_result)
+    travel_to follow_up_time do
+      PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
+    end
+
+    assert_predicate @payment_promise.reload, :status_followed_up?
+    refute_equal pending, @payment_promise.follow_up_message
+  end
+
   test "resolves a remotely paid promise even when Gmail is unavailable" do
     @account.update!(automatic_invoice_reminders_enabled: false)
     InvoiceReminders::InvoiceFreshnessCheck.expects(:call).with do |invoice|
@@ -186,6 +226,25 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     assert_predicate @payment_promise, :status_active?
     assert_predicate message, :status_pending?
     assert message.delivery_job_id.present?
+  end
+
+  test "a retry-safe provider error relinquishes the claim and the retry sends" do
+    attempts = sequence("promise-retry-safe-provider-error")
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver)
+      .in_sequence(attempts)
+      .raises(EmailConnection::Errors::TemporaryDeliveryError, "rate limited")
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver)
+      .in_sequence(attempts)
+      .returns(@delivery_result)
+
+    travel_to follow_up_time do
+      perform_enqueued_jobs(only: PaymentPromises::FollowUpJob) do
+        PaymentPromises::FollowUpJob.perform_later(@payment_promise.id)
+      end
+    end
+
+    assert_predicate @payment_promise.reload, :status_followed_up?
+    assert_predicate @payment_promise.follow_up_message, :status_sent?
   end
 
   test "a temporary-delivery retry reuses its owned pending message" do
@@ -385,5 +444,27 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
 
     def follow_up_time
       Time.zone.local(2026, 8, 4, 9)
+    end
+
+    def place_hold(idempotency_key)
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :manual,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key:
+      )
+    end
+
+    def release_hold(hold)
+      idempotency_key = "release-#{hold.id}"
+      hold.release!(
+        actor_user: users(:arjun),
+        idempotency_key:,
+        snapshot_token: CollectionHolds::HoldSnapshot.token_for(
+          hold:,
+          idempotency_key:
+        )
+      )
     end
 end

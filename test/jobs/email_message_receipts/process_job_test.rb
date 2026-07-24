@@ -1,6 +1,8 @@
 require "test_helper"
 
 class EmailMessageReceipts::ProcessJobTest < ActiveJob::TestCase
+  include ActionMailer::TestHelper
+
   setup do
     @connection = email_connections(:paid_jar_gmail)
     @receipt = @connection.email_message_receipts.create!(
@@ -80,6 +82,107 @@ class EmailMessageReceipts::ProcessJobTest < ActiveJob::TestCase
 
     assert_predicate @receipt.reload, :status_ignored?
     assert_equal "mailbox_replaced", @receipt.metadata.fetch("reason")
+  end
+
+  test "a processed scheduled reminder finalizes after credential replacement without Gmail access" do
+    reminder = create_sent_reminder
+    subscribe_to_reminders
+    link_processed_receipt(reminder.conversation_message)
+    @connection.increment!(:credential_generation)
+    EmailMessageReceipts::Processor.expects(:call).never
+
+    assert_emails 1 do
+      perform_receipt
+    end
+
+    assert @receipt.reload.post_processing_finalized_at
+    assert_predicate reminder.notification_deliveries.sole,
+      :status_delivered?
+    assert_predicate ConversationEvent
+      .kind_invoice_reminder_notifications_finalized.sole, :persisted?
+  end
+
+  test "a processed manual reply finalizes after provider replacement exactly once" do
+    message = create_sent_manual_reply
+    link_processed_receipt(message)
+    @connection.update_column(
+      :provider_account_id,
+      "replacement-provider-account"
+    )
+    EmailMessageReceipts::Processor.expects(:call).never
+
+    2.times { perform_receipt }
+
+    assert @receipt.reload.post_processing_finalized_at
+    assert_equal 1, message.conversation.conversation_events
+      .kind_conversation_manual_reply_sent.count
+    assert_nil message.conversation.reload.attention_required_at
+  end
+
+  test "a completed processed receipt makes every later job a no-op" do
+    message = create_sent_manual_reply
+    link_processed_receipt(message)
+    @receipt.update!(post_processing_finalized_at: Time.current)
+    ConversationMessages::EmailRecorder
+      .expects(:finalize_existing_delivery!)
+      .never
+
+    2.times { perform_receipt }
+
+    assert @receipt.reload.post_processing_finalized_at
+  end
+
+  test "a processed finalization failure stays retry-owned and sweep-discoverable" do
+    reminder = create_sent_reminder
+    link_processed_receipt(reminder.conversation_message)
+    EmailMessageReceipts::Processor.expects(:call).never
+    ConversationMessages::EmailRecorder
+      .stubs(:finalize_existing_delivery!)
+      .raises(StandardError, "finalization unavailable")
+
+    assert_enqueued_with(
+      job: EmailMessageReceipts::ProcessJob,
+      args: receipt_job_args(@receipt)
+    ) do
+      perform_receipt
+    end
+
+    assert_nil @receipt.reload.post_processing_finalized_at
+    assert @receipt.post_processing_enqueued_job_id
+    assert_nil @receipt.post_processing_job_id
+    clear_enqueued_jobs
+    travel EmailMessageReceipt::POST_PROCESSING_STALE_AFTER + 1.second do
+      assert_enqueued_with(
+        job: EmailMessageReceipts::ProcessJob,
+        args: receipt_job_args(@receipt)
+      ) do
+        EmailMessageReceipts::ProcessPendingJob.perform_now
+      end
+    end
+  end
+
+  test "finalization retry exhaustion releases ownership for the sweep" do
+    reminder = create_sent_reminder
+    link_processed_receipt(reminder.conversation_message)
+    ConversationMessages::EmailRecorder
+      .stubs(:finalize_existing_delivery!)
+      .raises(StandardError, "finalization unavailable")
+    job = EmailMessageReceipts::ProcessJob.new(*receipt_job_args(@receipt))
+    job.exception_executions[
+      [
+        EmailMessageReceipts::ProcessJob::ProcessedFinalizationError
+      ].to_s
+    ] = 4
+
+    job.perform_now
+
+    assert_nil @receipt.reload.post_processing_finalized_at
+    assert_nil @receipt.post_processing_enqueued_job_id
+    assert_nil @receipt.post_processing_job_id
+    clear_enqueued_jobs
+    assert_enqueued_jobs 1, only: EmailMessageReceipts::ProcessJob do
+      EmailMessageReceipts::ProcessPendingJob.perform_now
+    end
   end
 
   test "an old-generation job cannot claim or clear requeued same-mailbox work" do
@@ -321,5 +424,97 @@ class EmailMessageReceipts::ProcessJobTest < ActiveJob::TestCase
         receipt.provider_account_id,
         receipt.email_connection_generation
       ]
+    end
+
+    def link_processed_receipt(message)
+      @receipt.update_columns(
+        status: "processed",
+        conversation_message_id: message.id,
+        direction: message.direction,
+        processed_at: Time.current,
+        post_processing_finalized_at: nil
+      )
+    end
+
+    def subscribe_to_reminders
+      identity = Identity.create!(
+        email_address: "processed-receipt-notification@example.com"
+      )
+      user = @connection.account.users.create!(
+        name: "Processed receipt notification",
+        identity:,
+        verified_at: Time.current
+      )
+      user.notification_subscriptions.create!(
+        event: :invoice_reminder,
+        email: true
+      )
+    end
+
+    def create_sent_reminder
+      invoice = invoices(:xero_invoice)
+      message = invoice.conversation_messages.create!(
+        account: invoice.account,
+        invoice:,
+        conversation: Conversation.for_invoice!(invoice:),
+        direction: :outbound,
+        kind: :scheduled_reminder,
+        status: :sent,
+        sent_at: Time.current
+      )
+      invoice.invoice_reminders.create!(
+        account: invoice.account,
+        conversation_message: message,
+        category: :pre_due,
+        day_offset: 7,
+        stage_key: "pre_due_7",
+        tone: :friendly,
+        terminal_at_delivery: false
+      )
+    end
+
+    def create_sent_manual_reply
+      invoice = invoices(:xero_invoice)
+      conversation = Conversation.for_invoice!(invoice:)
+      anchor = conversation.conversation_messages.create!(
+        account: invoice.account,
+        invoice:,
+        email_connection: @connection,
+        email_connection_generation: @connection.credential_generation,
+        provider_account_id: @connection.provider_account_id,
+        provider_message_id: "processed-manual-reply-anchor",
+        provider_thread_id: "processed-manual-reply-thread",
+        internet_message_id: "<processed-manual-reply-anchor@example.com>",
+        conversation:,
+        direction: :inbound,
+        kind: :customer_email,
+        status: :received,
+        received_at: Time.current,
+        from_address: invoice.customer.email
+      )
+      conversation.update!(attention_required_at: anchor.received_at)
+      target = ConversationMessages::ManualReply.reply_target_for(
+        conversation:,
+        reply_to_message: anchor
+      )
+      message = ConversationMessages::ManualReply.enqueue!(
+        conversation:,
+        reply_to_message: anchor,
+        actor_user: users(:arjun),
+        body: "Already sent.",
+        idempotency_key: "processed-manual-reply",
+        composer_token: ConversationMessages::ManualReply.composer_token_for(
+          conversation:,
+          target:
+        )
+      )
+      message.update_columns(
+        direction: :outbound,
+        status: :sent,
+        sent_at: Time.current,
+        provider_message_id: "processed-manual-reply-provider",
+        provider_thread_id: anchor.provider_thread_id
+      )
+      message
     end
 end

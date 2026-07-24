@@ -15,6 +15,10 @@ class InvoiceReminder < ApplicationRecord
   belongs_to :invoice, inverse_of: :invoice_reminders
   belongs_to :conversation_message, inverse_of: :invoice_reminder
   belongs_to :invoice_schedule, optional: true, inverse_of: :invoice_reminders
+  has_many :notification_deliveries,
+    class_name: "InvoiceReminderNotificationDelivery",
+    dependent: :destroy,
+    inverse_of: :invoice_reminder
 
   enum :category, CATEGORIES, prefix: true, validate: true
   enum :tone, TONES, prefix: true, validate: { allow_nil: true }
@@ -38,6 +42,7 @@ class InvoiceReminder < ApplicationRecord
   validate :conversation_message_matches_reminder
   validate :invoice_schedule_matches_account
   validate :stage_key_matches_category_and_day_offset
+  validate :terminal_snapshot_is_immutable, on: :update
 
   def self.for_stage(stage)
     where(stage_key: stage.key).or(where(invoice_schedule: stage))
@@ -53,10 +58,25 @@ class InvoiceReminder < ApplicationRecord
       .find_by(invoice:, stage_key:)
       &.conversation_message
 
-    message&.mark_delivery_failed!(
+    return false unless message
+
+    message.mark_delivery_failed!(
       job_id: delivery_job_id,
-      failure_reason:
-    ) || false
+      failure_reason:,
+      delivery_uncertain: message.provider_delivery_claimed?
+    )
+  end
+
+  def terminal_stage?
+    return terminal_at_delivery? unless terminal_at_delivery.nil?
+    return false unless category_overdue?
+
+    stage = invoice_schedule || account.invoice_schedules.find_by(
+      category:,
+      day_offset:,
+      kind: invoice.customer.payer_segment
+    )
+    stage&.terminal? || false
   end
 
   private
@@ -86,5 +106,12 @@ class InvoiceReminder < ApplicationRecord
       return if stage_key == "#{category}_#{day_offset}"
 
       errors.add(:stage_key, "must match category and day offset")
+    end
+
+    def terminal_snapshot_is_immutable
+      change = terminal_at_delivery_change_to_be_saved
+      return unless change && !change.first.nil?
+
+      errors.add(:terminal_at_delivery, "cannot be changed after reservation")
     end
 end

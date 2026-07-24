@@ -22,6 +22,15 @@ class Conversation < ApplicationRecord
   has_many :conversation_events,
     dependent: :delete_all,
     inverse_of: :conversation
+  has_many :conversation_actions,
+    dependent: :destroy,
+    inverse_of: :conversation
+  has_many :collection_holds,
+    dependent: :destroy,
+    inverse_of: :conversation
+  has_many :conversation_escalations,
+    dependent: :destroy,
+    inverse_of: :conversation
 
   enum :status, STATUSES, prefix: true, validate: true
 
@@ -125,6 +134,13 @@ class Conversation < ApplicationRecord
     target
   end
 
+  def destroy_for_parent!
+    @destroying_for_parent = true
+    destroy!
+  ensure
+    @destroying_for_parent = false
+  end
+
   private
     def transition_to!(status:, resolved_at:, event_kind:, actor_user:, at:)
       with_lock do
@@ -196,7 +212,7 @@ class Conversation < ApplicationRecord
     end
 
     def prevent_invalid_linked_source_orphaning
-      return if destroyed_by_association
+      return if destroyed_by_association || @destroying_for_parent
 
       return unless linked_conversations.exists?
 
@@ -208,14 +224,14 @@ class Conversation < ApplicationRecord
     end
 
     def destroy_messages_for_parent_destruction
-      return unless destroyed_by_association
+      return unless destroyed_by_association || @destroying_for_parent
 
       ConversationMessage.destroy_in_dependency_order!(conversation_messages)
       conversation_messages.reset
     end
 
     def unlink_linked_sources_for_parent_destruction
-      return unless destroyed_by_association
+      return unless destroyed_by_association || @destroying_for_parent
 
       source_ids = linked_conversation_ids
       return if source_ids.empty?

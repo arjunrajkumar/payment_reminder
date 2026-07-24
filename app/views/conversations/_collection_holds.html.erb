@@ -1,0 +1,75 @@
+<section class="app-card app-conversation-panel" aria-label="Collection holds">
+  <h2 class="app-card__title">Collection holds</h2>
+
+  <% if detail.collection_held? %>
+    <p class="app-status-banner app-status-banner--paused">
+      Automated collection paused
+    </p>
+  <% end %>
+
+  <% detail.collection_holds.each do |hold| %>
+    <article class="app-work-item app-collection-hold">
+      <header class="app-work-item__header">
+        <strong><%= hold.reason.humanize %> hold</strong>
+        <span class="app-inbox-chip"><%= hold.status.humanize %></span>
+      </header>
+      <% if hold.note.present? %><p><%= hold.note %></p><% end %>
+      <% if hold.in_flight_delivery_message_ids.present? %>
+        <p class="app-status-banner app-status-banner--warning">
+          <%= in_flight_delivery_warning %>
+        </p>
+      <% end %>
+      <p class="app-card__description">
+        Placed by <%= hold.placed_by_user&.name || hold.placed_by_kind.humanize %>
+        at <%= l(hold.placed_at, format: :short) %>.
+      </p>
+
+      <% if hold.status_active? %>
+        <% release_key = SecureRandom.uuid %>
+        <%= form_with url: conversation_collection_hold_release_path(
+          conversation,
+          hold
+        ), scope: :release, class: "app-inline-form" do |form| %>
+          <%= form.hidden_field :idempotency_key, value: release_key %>
+          <%= form.hidden_field :hold_snapshot,
+            value: CollectionHolds::HoldSnapshot.token_for(
+              hold:,
+              idempotency_key: release_key
+            ) %>
+          <%= form.label :release_note, "Release note (optional)", class: "app-field-label" %>
+          <%= form.text_field :release_note, maxlength: 4_000, class: "app-input" %>
+          <%= form.submit "Release hold", class: "app-secondary-button" %>
+        <% end %>
+      <% else %>
+        <p class="app-card__description">
+          Released by <%= hold.released_by_user&.name || "a former account user" %>
+          at <%= l(hold.released_at, format: :short) %>.
+          <%= hold.release_note %>
+        </p>
+      <% end %>
+    </article>
+  <% end %>
+
+  <% if conversation.invoice %>
+    <details>
+      <summary>Place a collection hold</summary>
+      <%= form_with url: conversation_collection_holds_path(
+        conversation
+      ), scope: :collection_hold do |form| %>
+        <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+        <%= form.label :reason, "Reason", class: "app-field-label" %>
+        <%= form.select :reason,
+          CollectionHold::REASONS.keys.map { |reason| [ reason.to_s.humanize, reason ] },
+          {},
+          class: "app-select" %>
+        <%= form.label :note, "Note (optional)", class: "app-field-label" %>
+        <%= form.text_area :note, maxlength: 4_000, rows: 3, class: "app-textarea" %>
+        <%= form.submit "Pause automated collection", class: "app-secondary-button" %>
+      <% end %>
+    </details>
+  <% else %>
+    <p class="app-card__description">
+      Match an invoice before placing a collection hold.
+    </p>
+  <% end %>
+</section>

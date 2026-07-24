@@ -19,7 +19,17 @@ class ConversationEvent < ApplicationRecord
     conversation_manual_reply_queued: "conversation_manual_reply_queued",
     conversation_manual_reply_sent: "conversation_manual_reply_sent",
     conversation_manual_reply_failed: "conversation_manual_reply_failed",
-    conversation_manual_reply_unconfirmed: "conversation_manual_reply_unconfirmed"
+    conversation_manual_reply_unconfirmed: "conversation_manual_reply_unconfirmed",
+    conversation_action_created: "conversation_action_created",
+    conversation_action_revised: "conversation_action_revised",
+    conversation_action_approved: "conversation_action_approved",
+    conversation_action_rejected: "conversation_action_rejected",
+    invoice_reminder_notifications_finalized: "invoice_reminder_notifications_finalized",
+    collection_hold_placed: "collection_hold_placed",
+    collection_hold_released: "collection_hold_released",
+    conversation_escalated: "conversation_escalated",
+    conversation_escalation_resolved: "conversation_escalation_resolved",
+    conversation_escalation_reopened: "conversation_escalation_reopened"
   }.freeze
 
   belongs_to :account, inverse_of: :conversation_events
@@ -108,7 +118,11 @@ class ConversationEvent < ApplicationRecord
 
     def conversation_message_matches_event
       return if conversation_message.blank? || account.blank? || conversation.blank?
-      return if conversation_message.account == account && conversation_message.conversation == conversation
+      return if conversation_message.account == account &&
+        Conversations::ReviewWorkUnit.includes_message?(
+          conversation: conversation.canonical,
+          message: conversation_message
+        )
 
       errors.add(:conversation_message, "must belong to the same account and conversation")
     end

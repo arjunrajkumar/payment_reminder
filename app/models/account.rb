@@ -8,9 +8,16 @@ class Account < ApplicationRecord
   has_many :invoices, dependent: :destroy
   has_many :payment_promises, dependent: :destroy, inverse_of: :account
   has_many :invoice_reminders, dependent: :destroy, inverse_of: :account
+  has_many :invoice_reminder_notification_deliveries,
+    dependent: :destroy,
+    inverse_of: :account
   has_many :invoice_reminder_suppressions,
     dependent: :destroy,
     inverse_of: :account
+  has_many :conversation_actions, dependent: :destroy, inverse_of: :account
+  has_many :collection_holds, dependent: :destroy, inverse_of: :account
+  has_many :conversation_escalations, dependent: :destroy, inverse_of: :account
+  before_destroy :destroy_workflows_before_users, prepend: true
   before_destroy :destroy_conversation_messages_in_dependency_order
   has_many :conversation_messages, dependent: :destroy, inverse_of: :account
   has_many :conversations, dependent: :destroy, inverse_of: :account
@@ -63,6 +70,23 @@ class Account < ApplicationRecord
   end
 
   private
+    def destroy_workflows_before_users
+      ConversationAction.where(account_id: id).find_each do |action|
+        action.send(:destroy_for_parent!)
+      end
+      CollectionHold.where(account_id: id).find_each do |hold|
+        hold.send(:destroy_for_parent!)
+      end
+      ConversationEscalation.where(account_id: id).find_each do |escalation|
+        escalation.send(:destroy_for_parent!)
+      end
+      %i[
+        conversation_actions
+        collection_holds
+        conversation_escalations
+      ].each { |name| association(name).reset }
+    end
+
     def destroy_conversation_messages_in_dependency_order
       ConversationMessage.destroy_in_dependency_order!(conversation_messages)
     end

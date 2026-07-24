@@ -28,6 +28,18 @@
 
 <%= render "conversations/health", health: @health %>
 
+<%= render "conversations/collection_holds",
+  conversation:,
+  detail: @detail %>
+
+<%= render "conversations/actions",
+  conversation:,
+  actions: @detail.actions %>
+
+<%= render "conversations/escalations",
+  conversation:,
+  escalations: @detail.escalations %>
+
 <section class="app-conversation-timeline" aria-label="Conversation timeline">
   <% @detail.timeline.items.each do |item| %>
     <% if item.type == :message %>
@@ -46,11 +58,13 @@
     <%= render "conversations/reply_composer",
       conversation: conversation,
       target:,
-      health: @health %>
+      health: @health,
+      collection_held: @detail.collection_held? %>
   <% end %>
 <% else %>
   <%= render "conversations/reply_composer",
     conversation: conversation,
     target: nil,
-    health: @health %>
+    health: @health,
+    collection_held: @detail.collection_held? %>
 <% end %>

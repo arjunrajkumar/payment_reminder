@@ -1,5 +1,6 @@
 class EmailMessageReceipts::ProcessJob < ApplicationJob
   class UnexpectedProcessingError < StandardError; end
+  class ProcessedFinalizationError < StandardError; end
 
   MAX_ATTEMPTS = 10
 
@@ -28,11 +29,19 @@ class EmailMessageReceipts::ProcessJob < ApplicationJob
       job.release_processing_enqueue_reservation
       raise error
     end
+  retry_on ProcessedFinalizationError,
+    wait: :polynomially_longer,
+    attempts: 5 do |job, _error|
+      job.release_post_processing_ownership
+    end
 
   around_enqueue do |job, enqueue|
     enqueue.call
   ensure
-    job.release_processing_enqueue_reservation unless job.successfully_enqueued?
+    unless job.successfully_enqueued?
+      job.release_processing_enqueue_reservation
+      job.release_post_processing_ownership
+    end
   end
 
   def self.enqueue(receipt)
@@ -54,6 +63,31 @@ class EmailMessageReceipts::ProcessJob < ApplicationJob
     raise
   end
 
+  def self.enqueue_post_processing(receipt)
+    job = new(
+      receipt.id,
+      receipt.provider_account_id,
+      receipt.email_connection_generation
+    )
+    return false unless receipt.reserve_post_processing_enqueue!(
+      job_id: job.job_id
+    )
+
+    enqueued = job.enqueue
+    return enqueued if enqueued
+
+    raise(
+      job.enqueue_error ||
+        ActiveJob::EnqueueError.new(
+          "Could not enqueue Gmail receipt finalization"
+        )
+    )
+  rescue StandardError
+    receipt.release_post_processing_ownership!(job_id: job.job_id) if
+      receipt && job
+    raise
+  end
+
   def perform(email_message_receipt_id, provider_account_id, email_connection_generation)
     receipt = EmailMessageReceipt.find_by(id: email_message_receipt_id)
     return unless receipt
@@ -64,15 +98,21 @@ class EmailMessageReceipts::ProcessJob < ApplicationJob
       receipt.release_processing_enqueue!(job_id:)
       return
     end
+    if receipt.status_processed?
+      if receipt.post_processing_finalized_at?
+        receipt.release_post_processing_ownership!(job_id:)
+        return
+      end
+      return unless receipt.claim_post_processing!(job_id:)
+
+      finalize_processed_receipt!(receipt, job_id:)
+      return
+    end
     unless receipt.current_mailbox?
       receipt.retire_if_mailbox_replaced!(
         expected_provider_account_id: provider_account_id,
         expected_generation: email_connection_generation
       )
-      return
-    end
-    if receipt.status_processed?
-      enqueue_reconsidered_thread_receipts(receipt, receipt.conversation_message)
       return
     end
     unless receipt.email_connection.inbound_ready?
@@ -90,6 +130,9 @@ class EmailMessageReceipts::ProcessJob < ApplicationJob
 
     recorded_message = EmailMessageReceipts::Processor.call(receipt, job_id:)
     enqueue_reconsidered_thread_receipts(receipt, recorded_message)
+    receipt.mark_post_processing_finalized! if receipt.reload.status_processed?
+  rescue ProcessedFinalizationError
+    raise
   rescue ActiveRecord::Deadlocked, ActiveRecord::LockWaitTimeout => error
     retry_at = receipt && receipt.attempts < MAX_ATTEMPTS ? Time.current : nil
     receipt&.fail!(
@@ -134,6 +177,23 @@ class EmailMessageReceipts::ProcessJob < ApplicationJob
   def release_processing_enqueue_reservation
     receipt = EmailMessageReceipt.find_by(id: arguments.first)
     receipt&.release_processing_enqueue!(job_id:)
+  end
+
+  def release_post_processing_ownership
+    receipt = EmailMessageReceipt.find_by(id: arguments.first)
+    receipt&.release_post_processing_ownership!(job_id:)
+  end
+
+  def finalize_processed_receipt!(receipt, job_id:)
+    message = receipt.conversation_message
+    ConversationMessages::EmailRecorder.finalize_existing_delivery!(message)
+    enqueue_reconsidered_thread_receipts(receipt, message)
+    receipt.complete_post_processing!(job_id:)
+  rescue StandardError => error
+    receipt.reserve_post_processing_retry!(job_id:)
+    sanitized = ProcessedFinalizationError.new(error.class.name)
+    sanitized.set_backtrace(error.backtrace)
+    raise sanitized, cause: nil
   end
 
   private

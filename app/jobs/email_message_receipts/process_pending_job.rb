@@ -16,6 +16,15 @@ class EmailMessageReceipts::ProcessPendingJob < ApplicationJob
   )
 
   def perform
+    EmailMessageReceipt.unfinished_post_processing.find_each do |receipt|
+      EmailMessageReceipts::ProcessJob.enqueue_post_processing(receipt)
+    rescue StandardError => error
+      Rails.logger.error(
+        "email.processed_receipt_enqueue_failed " \
+          "receipt_id=#{receipt.id} error=#{error.class.name}"
+      )
+    end
+
     EmailMessageReceipt.stale_processing(before: STALE_AFTER.ago).find_each do |receipt|
       if receipt.current_mailbox?
         receipt.recover_stale_processing!(before: STALE_AFTER.ago)

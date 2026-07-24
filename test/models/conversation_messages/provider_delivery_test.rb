@@ -78,6 +78,7 @@ class ConversationMessages::ProviderDeliveryTest < ActiveSupport::TestCase
     message = reservation.message
     old_provider_account_id = message.provider_account_id
     old_generation = message.email_connection_generation
+    assert message.claim_provider_delivery!(job_id: delivery_job_id)
     @connection.increment!(:credential_generation)
 
     error = assert_raises EmailConnection::Errors::TemporaryDeliveryError do
@@ -94,6 +95,7 @@ class ConversationMessages::ProviderDeliveryTest < ActiveSupport::TestCase
     assert_equal "Email connection changed before delivery; retrying.", error.message
     assert_nil error.cause
     assert_predicate message.reload, :status_pending?
+    assert_nil message.provider_delivery_started_at
     assert_nil message.email_connection
     assert_nil message.provider_account_id
     assert_nil message.email_connection_generation

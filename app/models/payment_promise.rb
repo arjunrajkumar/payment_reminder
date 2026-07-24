@@ -94,32 +94,69 @@ class PaymentPromise < ApplicationRecord
     provider_message_id:,
     provider_thread_id: nil
   )
-    record_follow_up_delivery(as: :followed_up) do |message|
-      message.mark_delivery_sent!(
-        job_id:,
+    record_follow_up_delivery(
+      as: :followed_up,
+      job_id:,
+      message_attributes: {
+        status: :sent,
         sent_at:,
         provider_message_id:,
-        provider_thread_id:
-      )
-    end
+        provider_thread_id:,
+        failure_reason: nil,
+        delivery_uncertain: false
+      }
+    )
   end
 
-  def record_follow_up_failed!(job_id:, failure_reason:)
-    record_follow_up_delivery(as: :follow_up_failed) do |message|
-      message.mark_delivery_failed!(job_id:, failure_reason:)
+  def record_follow_up_failed!(
+    job_id:,
+    failure_reason:,
+    delivery_uncertain: false
+  )
+    record_follow_up_delivery(
+      as: :follow_up_failed,
+      job_id:,
+      message_attributes: {
+        status: :failed,
+        sent_at: nil,
+        provider_message_id: nil,
+        provider_thread_id: nil,
+        failure_reason:,
+        delivery_uncertain:
+      }
+    )
+  end
+
+  def confirm_imported_follow_up!(message:)
+    invoice.with_lock do
+      reload
+      next unless follow_up_message_id == message.id
+      next unless status_active? || status_follow_up_failed?
+
+      update!(status: :followed_up)
     end
+    self
   end
 
   private
-    def record_follow_up_delivery(as:)
+    def record_follow_up_delivery(as:, job_id:, message_attributes:)
       recorded = false
 
       self.class.transaction do
-        message = follow_up_message
-        next unless message && yield(message)
+        invoice.with_lock do
+          reload
+          message = follow_up_message
+          next unless status_active? && message
 
-        resolve_as!(as)
-        recorded = true
+          message.with_lock do
+            next unless follow_up_message_id == message.id
+            next unless message.delivery_owned_by?(job_id)
+
+            message.update!(message_attributes)
+            update!(status: as)
+            recorded = true
+          end
+        end
       end
 
       recorded

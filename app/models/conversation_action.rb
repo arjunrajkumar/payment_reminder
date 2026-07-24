@@ -50,10 +50,16 @@ class ConversationAction < ApplicationRecord
   has_many :conversation_escalations,
     dependent: :nullify,
     inverse_of: :conversation_action
+  has_one :execution,
+    class_name: "ConversationActionExecution",
+    dependent: :destroy,
+    inverse_of: :conversation_action
 
   enum :action_type, ACTION_TYPES, prefix: true, validate: true
   enum :status, STATUSES, prefix: true, validate: true
   enum :origin_kind, ORIGIN_KINDS, prefix: true, validate: true
+
+  attribute :decision_actor_snapshot, default: -> { {} }
 
   normalizes :idempotency_key,
     :decision_idempotency_key,
@@ -67,6 +73,7 @@ class ConversationAction < ApplicationRecord
   validate :decision_state_matches_status
   validate :decision_records_match_action
 
+  before_destroy :destroy_execution_for_parent, prepend: true
   before_destroy :prepare_for_parent_destruction
   before_validation :prevent_unaudited_update, on: :update
   before_update :prevent_unaudited_update
@@ -101,6 +108,13 @@ class ConversationAction < ApplicationRecord
     :destroy_for_parent!
 
   private
+    def destroy_execution_for_parent
+      return unless destroyed_by_association || @destroying_for_parent
+
+      execution&.send(:destroy_for_parent!)
+      association(:execution).reset
+    end
+
     def with_audited_update(kind)
       previous = @audited_update
       @audited_update = kind
@@ -115,7 +129,7 @@ class ConversationAction < ApplicationRecord
       when :decision
         %w[
           status decided_revision_id decided_by_user_id decided_at
-          decision_note decision_idempotency_key
+          decision_note decision_idempotency_key decision_actor_snapshot
         ].to_set
       when :conversation_transfer
         %w[conversation_id].to_set
@@ -166,14 +180,20 @@ class ConversationAction < ApplicationRecord
     def decision_state_matches_status
       fields = [
         decided_revision,
-        decided_by_user,
         decided_at,
         decision_idempotency_key
       ]
       if status_pending_approval?
-        errors.add(:base, "pending actions cannot have decision fields") if fields.any?(&:present?)
-      elsif fields.any?(&:blank?)
-        errors.add(:base, "decided actions require revision, actor, time, and idempotency")
+        fields << decided_by_user
+        fields << decision_actor_snapshot.presence
+        errors.add(:base, "pending actions cannot have decision fields") if
+          fields.any?(&:present?)
+      elsif fields.any?(&:blank?) ||
+          decision_actor_snapshot.to_h["id"].blank?
+        errors.add(
+          :base,
+          "decided actions require revision, actor evidence, time, and idempotency"
+        )
       end
       if status_rejected? && decision_note.blank?
         errors.add(:decision_note, "is required when rejecting an action")

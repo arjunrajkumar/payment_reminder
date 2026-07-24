@@ -78,12 +78,12 @@ class ConversationInboxTest < ApplicationSystemTestCase
     ConversationActions::Proposal.record!(
       conversation:,
       source_message: anchor,
-      action_type: :answer_due_date,
+      action_type: :record_payment_promise,
       origin_kind: :user,
       created_by_user: actor,
-      user_facing_summary: "Answer the customer's due-date question.",
-      rationale: "The invoice contains the due date.",
-      arguments: { "invoice_fact" => "due_on" },
+      user_facing_summary: "Record the customer's promised payment date.",
+      rationale: "The customer supplied a payment date.",
+      arguments: { "promised_on" => "2026-08-15" },
       proposed_reply: {
         "subject" => "Invoice due date",
         "body" => "Your invoice is due on August 15."
@@ -106,20 +106,25 @@ class ConversationInboxTest < ApplicationSystemTestCase
 
     visit conversation_path(conversation, script_name: account.slug)
 
-    assert_text "Answer the customer's due-date question."
+    assert_text "Record the customer's promised payment date."
     assert_selector ".app-conversation-event",
       text: "Reminder notifications finalized"
     assert_selector ".app-conversation-event",
       text: "Delivered: 1 · Unconfirmed: 1 · Failed: 1 · Canceled: 0"
     assert_no_text "never-render@example.com"
     assert_no_text "never render transport details"
-    assert_text "Approval records a human decision only"
+    assert_text "Approval queues the exact deterministic command"
     assert_selector ".app-nav-badge", text: "1"
 
-    find("summary", text: "Edit human-visible proposal").click
-    fill_in "Summary", with: "Send the reviewed due-date wording."
-    fill_in "Reply subject", with: "Reviewed invoice due date"
-    fill_in "Reply body", with: "Your reviewed invoice is due on August 15."
+    find("summary", text: "Edit executable proposal").click
+    fill_in "Summary", with: "Record the corrected payment date."
+    date_field = find_field("Promised payment date")
+    page.execute_script(
+      "arguments[0].value = '2026-08-16'",
+      date_field.native
+    )
+    fill_in "Optional greeting", with: "Hello,"
+    fill_in "Optional closing", with: "Thank you."
     click_button "Save new revision"
 
     assert_text "Action proposal revised."
@@ -128,8 +133,42 @@ class ConversationInboxTest < ApplicationSystemTestCase
     fill_in "Approval note", with: "Exact revision reviewed."
     click_button "Approve revision 2"
 
-    assert_text "Nothing has been sent or executed."
+    assert_text "The deterministic command has been queued."
     assert_no_selector ".app-nav-badge"
+
+    action = conversation.conversation_actions.sole.reload
+    invoice.update!(synced_at: Time.current)
+    InvoiceReminders::InvoiceFreshnessCheck.stubs(:call).returns(invoice)
+    ConversationActions::Executor.call(execution: action.execution)
+    execution = action.execution.reload
+    reply = execution.conversation_message
+    assert_equal Date.new(2026, 8, 16),
+      execution.payment_promise.promised_on
+    assert_includes reply.body, "Hello,"
+    reply.update!(
+      status: :failed,
+      failure_reason:
+        ConversationMessages::ProviderDelivery::UNCONFIRMED_FAILURE_REASON,
+      delivery_uncertain: true,
+      provider_delivery_started_at: Time.current
+    )
+    ConversationMessages::ActionReplyOutcome.finalize!(reply)
+    visit conversation_path(conversation, script_name: account.slug)
+    assert_text "Uncertain"
+    assert_text "Payment promised for"
+
+    reply.update!(
+      status: :sent,
+      sent_at: Time.current,
+      provider_message_id: "system-reconciled-action",
+      provider_thread_id: anchor.provider_thread_id,
+      failure_reason: nil,
+      delivery_uncertain: false
+    )
+    ConversationMessages::ActionReplyOutcome.finalize!(reply)
+    visit conversation_path(conversation, script_name: account.slug)
+    assert_text "Succeeded"
+    assert_text "August 16, 2026"
 
     in_flight = conversation.conversation_messages.create!(
       account:,

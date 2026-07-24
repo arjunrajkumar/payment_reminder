@@ -30,8 +30,13 @@ class User < ApplicationRecord
   has_many :decided_conversation_actions,
     class_name: "ConversationAction",
     foreign_key: :decided_by_user_id,
-    dependent: :restrict_with_exception,
+    dependent: :nullify,
     inverse_of: :decided_by_user
+  has_many :approved_conversation_action_executions,
+    class_name: "ConversationActionExecution",
+    foreign_key: :approved_by_user_id,
+    dependent: :nullify,
+    inverse_of: :approved_by_user
   has_many :conversation_action_revisions,
     foreign_key: :author_user_id,
     dependent: :restrict_with_exception,
@@ -72,6 +77,7 @@ class User < ApplicationRecord
       %i[
         created_conversation_actions
         decided_conversation_actions
+        approved_conversation_action_executions
         conversation_action_revisions
         placed_collection_holds
         released_collection_holds

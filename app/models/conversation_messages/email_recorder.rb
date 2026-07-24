@@ -42,6 +42,8 @@ class ConversationMessages::EmailRecorder
     if existing.kind_manual_reply?
       Conversations::Attention.clear_for_outbound!(existing)
       ConversationMessages::ManualReplyOutcome.finalize!(existing)
+    elsif existing.action_reply?
+      ConversationMessages::ActionReplyOutcome.finalize!(existing)
     elsif existing.kind_promise_follow_up?
       existing.payment_promise_follow_up&.confirm_imported_follow_up!(
         message: existing
@@ -74,6 +76,13 @@ class ConversationMessages::EmailRecorder
           manual_reminder
           scheduled_reminder
           promise_follow_up
+          due_date_answer
+          payment_status_answer
+          outstanding_amount_answer
+          invoice_resend
+          payment_promise_acknowledgement
+          dispute_acknowledgement
+          recipient_update_acknowledgement
         ]
       )
       .where(
@@ -314,6 +323,8 @@ class ConversationMessages::EmailRecorder
     def finalize_reconciled_delivery(existing)
       if existing.kind_manual_reply?
         ConversationMessages::ManualReplyOutcome.finalize!(existing)
+      elsif existing.action_reply?
+        ConversationMessages::ActionReplyOutcome.finalize!(existing)
       elsif existing.kind_scheduled_reminder?
         reminder = existing.invoice_reminder
         InvoiceReminders::Notifier.deliver_once(

@@ -12,7 +12,9 @@ class Conversations::Actions::ApprovalsController < Conversations::Actions::Base
       idempotency_key: attributes.fetch(:idempotency_key),
       snapshot_token: attributes.fetch(:action_snapshot)
     )
-    redirect_success("Action approved. Nothing has been sent or executed.")
+    redirect_success(
+      "Action approved. The deterministic command has been queued."
+    )
   rescue ConversationActions::Error,
     ActiveRecord::RecordInvalid,
     ArgumentError => error

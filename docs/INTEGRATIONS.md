@@ -319,10 +319,32 @@ pause without resolving the promise and are reconsidered after every hold is rel
 threaded replies remain available during a hold. Once a Gmail provider request has passed the final
 delivery handoff, it cannot be recalled.
 
-Action approvals in the Inbox do not call Gmail. The action/revision/approval foundation records
-review evidence only; deterministic commands, action execution, AI classification, AI-generated
-actions or replies, customer-specific AI learning, automatic dispute processing, and automatic
-allowlisting are not implemented.
+Action approval durably queues one deterministic Rails command for the exact approved revision.
+When invoice facts are needed, PaymentReminder refreshes the single provider invoice before it
+re-enters the locked execution transaction. Rails—not proposal text—selects the command, validates
+ownership and authorization, derives invoice facts, chooses the verified recipient, and renders the
+versioned reply.
+
+Execution scheduling and action-reply scheduling are durable outboxes with bounded attempts,
+backoff, ownership generations, and recurring stale-owner/orphan recovery. The local command effect
+commits in its own fenced phase before reply reservation. A disconnected mailbox, unsafe thread,
+process crash, or queue failure therefore cannot undo an already recorded promise, recipient
+change, dispute hold, or escalation.
+
+Approved action replies use the existing Gmail delivery ledger and preserve provider thread ID,
+`In-Reply-To`, `References`, mailbox identity, credential generation, sender, recipient, subject,
+body, stable RFC Message-ID, and immutable approving-user snapshot. Definite delivery failure,
+uncertain provider handoff, and later Gmail SENT reconciliation remain separate durable outcomes.
+Unknown delivery is not retried automatically. Current database SENT evidence is authoritative over
+stale failed state; it can upgrade a failed or unconfirmed execution without removing historical
+failure events or resolving the command's dispute escalation.
+
+Dispute execution commits an invoice collection hold and human escalation before any
+acknowledgement delivery begins. The hold is released only through the existing explicit human
+control.
+
+AI classification, prompt/model calls, shadow mode, automatic execution allowlists,
+customer-specific learning, and daily summaries are not implemented.
 
 ### Create the Google OAuth application
 

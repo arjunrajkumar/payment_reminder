@@ -8,12 +8,12 @@ class ConversationWorkflowsControllerTest < ActionDispatch::IntegrationTest
     @conversation = Conversation.for_invoice!(invoice: @invoice)
     @action = ConversationActions::Proposal.record!(
       conversation: @conversation,
-      action_type: :answer_due_date,
+      action_type: :other,
       origin_kind: :user,
       created_by_user: @actor,
       user_facing_summary: "Answer with the invoice due date.",
       rationale: "The customer asked when payment is due.",
-      arguments: { "invoice_fact" => "due_on" },
+      arguments: {},
       proposed_reply: {
         "subject" => "Invoice due date",
         "body" => "Your invoice is due on the date shown."
@@ -39,7 +39,9 @@ class ConversationWorkflowsControllerTest < ActionDispatch::IntegrationTest
     }
 
     assert_redirected_to conversation_path(@conversation)
-    assert_equal 2, @action.reload.current_revision.revision_number
+    assert_equal 2,
+      @action.reload.current_revision.revision_number,
+      flash[:alert]
 
     get conversation_url(@conversation)
     approval_key = input_value("approval[idempotency_key]")
@@ -54,7 +56,8 @@ class ConversationWorkflowsControllerTest < ActionDispatch::IntegrationTest
     }
 
     assert_redirected_to conversation_path(@conversation)
-    assert_equal "Action approved. Nothing has been sent or executed.", flash[:notice]
+    assert_equal "Action approved. The deterministic command has been queued.",
+      flash[:notice]
     assert_predicate @action.reload, :status_approved?
     assert_equal 2, @action.decided_revision.revision_number
   end
@@ -96,7 +99,7 @@ class ConversationWorkflowsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate @action.reload, :status_pending_approval?
   end
 
-  test "wording edit preserves unexposed proposed reply fields" do
+  test "revision removes arbitrary prose and preserves non-executable evidence" do
     action = ConversationActions::Proposal.record!(
       conversation: @conversation,
       action_type: :answer_due_date,
@@ -127,8 +130,8 @@ class ConversationWorkflowsControllerTest < ActionDispatch::IntegrationTest
     }
 
     proposed_reply = action.reload.current_revision.proposed_reply
-    assert_equal "Edited subject", proposed_reply["subject"]
-    assert_equal "Edited body", proposed_reply["body"]
+    assert_nil proposed_reply["subject"], flash[:alert]
+    assert_nil proposed_reply["body"]
     assert_equal({ "include_cc" => true }, proposed_reply["recipient_policy"])
     assert_equal "reply", proposed_reply["thread_mode"]
   end

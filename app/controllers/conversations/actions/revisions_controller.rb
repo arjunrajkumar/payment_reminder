@@ -9,8 +9,9 @@ class Conversations::Actions::RevisionsController < Conversations::Actions::Base
       rationale: attributes[:rationale],
       base_revision_id: attributes[:base_revision_id].presence ||
         conversation_action.current_revision.id,
-      proposed_reply_subject: attributes[:proposed_reply_subject].to_s,
-      proposed_reply_body: attributes[:proposed_reply_body].to_s,
+      arguments: attributes[:arguments]&.to_h || {},
+      greeting: attributes[:greeting],
+      closing: attributes[:closing],
       idempotency_key: attributes.fetch(:idempotency_key),
       snapshot_token: attributes.fetch(:action_snapshot)
     )
@@ -27,10 +28,11 @@ class Conversations::Actions::RevisionsController < Conversations::Actions::Base
         :user_facing_summary,
         :rationale,
         :base_revision_id,
-        :proposed_reply_subject,
-        :proposed_reply_body,
+        :greeting,
+        :closing,
         :idempotency_key,
-        :action_snapshot
+        :action_snapshot,
+        arguments: %i[promised_on email mode]
       )
     end
 end

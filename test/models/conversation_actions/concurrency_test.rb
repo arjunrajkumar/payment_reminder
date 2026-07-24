@@ -31,7 +31,7 @@ class ConversationActions::ConcurrencyTest < ActiveSupport::TestCase
       conversation = Conversation.for_invoice!(invoice:)
       action = ConversationActions::Proposal.record!(
         conversation:,
-        action_type: :answer_due_date,
+        action_type: :other,
         origin_kind: :user,
         created_by_user: actor,
         user_facing_summary: "Concurrency proposal.",
@@ -132,6 +132,43 @@ class ConversationActions::ConcurrencyTest < ActiveSupport::TestCase
       ).to_a
     end
     assert_equal 1, terminal_events.count
+    expected_executions = action.status_approved? ? 1 : 0
+    assert_equal expected_executions,
+      ConversationActionExecution.where(
+        conversation_action_id: action.id
+      ).count
+  end
+
+  test "concurrent exact approvals create one execution request" do
+    action = ConversationAction.uncached { ConversationAction.find(@action_id) }
+    revision = action.current_revision
+    key = "concurrent-exact-approval"
+    token = ConversationActions::ActionSnapshot.token_for(
+      action:,
+      idempotency_key: key
+    )
+
+    results = run_concurrently([ :first, :second ]) do |_attempt|
+      ConversationActions::Approval.call(
+        action: ConversationAction.find(@action_id),
+        revision: ConversationActionRevision.find(revision.id),
+        actor_user: User.find(@actor_id),
+        idempotency_key: key,
+        snapshot_token: token
+      )
+    end
+
+    assert results.all? { |result| result.is_a?(ConversationAction) },
+      results.map(&:class).inspect
+    assert_equal 1,
+      ConversationActionExecution.where(
+        conversation_action_id: @action_id
+      ).count
+    assert_equal 1,
+      ConversationEvent.where(
+        conversation_id: @conversation_id,
+        kind: :conversation_action_execution_queued
+      ).count
   end
 
   private

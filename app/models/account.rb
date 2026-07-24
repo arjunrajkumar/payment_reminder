@@ -15,6 +15,9 @@ class Account < ApplicationRecord
     dependent: :destroy,
     inverse_of: :account
   has_many :conversation_actions, dependent: :destroy, inverse_of: :account
+  has_many :conversation_action_executions,
+    dependent: :destroy,
+    inverse_of: :account
   has_many :collection_holds, dependent: :destroy, inverse_of: :account
   has_many :conversation_escalations, dependent: :destroy, inverse_of: :account
   before_destroy :destroy_workflows_before_users, prepend: true
@@ -71,6 +74,9 @@ class Account < ApplicationRecord
 
   private
     def destroy_workflows_before_users
+      ConversationActionExecution.where(account_id: id).find_each do |execution|
+        execution.send(:destroy_for_parent!)
+      end
       ConversationAction.where(account_id: id).find_each do |action|
         action.send(:destroy_for_parent!)
       end
@@ -81,6 +87,7 @@ class Account < ApplicationRecord
         escalation.send(:destroy_for_parent!)
       end
       %i[
+        conversation_action_executions
         conversation_actions
         collection_holds
         conversation_escalations

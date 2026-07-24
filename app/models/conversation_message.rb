@@ -34,9 +34,12 @@ class ConversationMessage < ApplicationRecord
     manual_reminder: "manual_reminder",
     due_date_answer: "due_date_answer",
     payment_status_answer: "payment_status_answer",
+    outstanding_amount_answer: "outstanding_amount_answer",
     invoice_resend: "invoice_resend",
+    payment_promise_acknowledgement: "payment_promise_acknowledgement",
     promise_follow_up: "promise_follow_up",
-    dispute_acknowledgement: "dispute_acknowledgement"
+    dispute_acknowledgement: "dispute_acknowledgement",
+    recipient_update_acknowledgement: "recipient_update_acknowledgement"
   }.freeze
   MATCHING_STATUSES = {
     matched: "matched",
@@ -60,6 +63,17 @@ class ConversationMessage < ApplicationRecord
     manual_match: "manual_match",
     no_match_needed: "no_match_needed"
   }.freeze
+  REPLY_SCHEDULING_STATUSES = {
+    reserved: "reserved",
+    claimed: "claimed",
+    enqueued: "enqueued",
+    consumed: "consumed",
+    exhausted: "exhausted",
+    canceled: "canceled"
+  }.freeze
+  MAXIMUM_REPLY_SCHEDULING_ATTEMPTS = 5
+  STALE_REPLY_SCHEDULING_AFTER = 10.minutes
+  ReplySchedulingClaim = Data.define(:token, :generation, :attempt, :job_id)
 
   belongs_to :account, inverse_of: :conversation_messages
   belongs_to :conversation, inverse_of: :conversation_messages
@@ -77,6 +91,9 @@ class ConversationMessage < ApplicationRecord
     class_name: "User",
     optional: true,
     inverse_of: :reviewed_conversation_messages
+  belongs_to :conversation_action_execution,
+    optional: true,
+    inverse_of: :conversation_message
   has_many :replies,
     class_name: "ConversationMessage",
     foreign_key: :reply_to_message_id,
@@ -121,6 +138,10 @@ class ConversationMessage < ApplicationRecord
   enum :matching_status, MATCHING_STATUSES, prefix: true, validate: true
   enum :matching_method, MATCHING_METHODS, prefix: true, validate: true
   enum :review_outcome, REVIEW_OUTCOMES, prefix: true, validate: { allow_nil: true }
+  enum :reply_scheduling_status,
+    REPLY_SCHEDULING_STATUSES,
+    prefix: :reply_scheduling,
+    validate: { allow_nil: true }
 
   attribute :to_addresses, default: -> { [] }
   attribute :cc_addresses, default: -> { [] }
@@ -130,6 +151,7 @@ class ConversationMessage < ApplicationRecord
   attribute :reference_message_ids, default: -> { [] }
   attribute :provider_metadata, default: -> { {} }
   attribute :review_reasons, default: -> { [] }
+  attribute :actor_snapshot, default: -> { {} }
 
   before_validation :assign_outbound_internet_message_id, on: :create
   before_validation :set_internet_message_id_digest
@@ -171,6 +193,8 @@ class ConversationMessage < ApplicationRecord
   validate :review_completion_is_immutable, on: :update
   validate :review_outcome_matches_completion
   validate :delivery_uncertainty_matches_status
+  validate :action_reply_scheduling_is_complete
+  validate :action_reply_actor_evidence_is_complete
 
   scope :successful_outbound, -> do
     direction_outbound.where(status: :sent).or(
@@ -216,11 +240,168 @@ class ConversationMessage < ApplicationRecord
 
     attempted.or(untracked)
   end
+  scope :due_action_reply_scheduling, ->(at: Time.current) do
+    where.not(conversation_action_execution_id: nil)
+      .reply_scheduling_reserved
+      .where(
+        reply_scheduling_attempts: ...MAXIMUM_REPLY_SCHEDULING_ATTEMPTS
+      )
+      .where(next_reply_scheduling_at: [ nil, ..at ])
+  end
+  scope :stale_action_reply_scheduling, ->(before:) do
+    where.not(conversation_action_execution_id: nil)
+      .reply_scheduling_claimed
+      .where(reply_scheduling_claimed_at: ...before)
+  end
+  scope :stale_enqueued_action_reply_scheduling, ->(before:) do
+    where.not(conversation_action_execution_id: nil)
+      .reply_scheduling_enqueued
+      .where(reply_schedule_consumed_at: nil, reply_scheduled_at: ...before)
+  end
 
   def delivery_owned_by?(job_id)
     normalized_job_id = job_id.to_s.strip.presence
 
     status_pending? && normalized_job_id.present? && delivery_job_id == normalized_job_id
+  end
+
+  def claim_reply_scheduling!(job_id:, at: Time.current)
+    token = SecureRandom.uuid
+    claim = nil
+    with_lock do
+      next unless action_reply? && status_pending? &&
+        reply_scheduling_reserved?
+      next if provider_delivery_claimed?
+      next if reply_scheduling_attempts >=
+        MAXIMUM_REPLY_SCHEDULING_ATTEMPTS
+      next if next_reply_scheduling_at.present? &&
+        next_reply_scheduling_at > at
+
+      generation = reply_scheduling_generation + 1
+      with_reply_scheduling_change do
+        update!(
+          reply_scheduling_status: :claimed,
+          reply_scheduling_generation: generation,
+          reply_scheduling_token: token,
+          reply_scheduling_claimed_at: at,
+          reply_scheduling_attempts: reply_scheduling_attempts + 1,
+          delivery_job_id: job_id,
+          last_reply_scheduling_error: nil
+        )
+      end
+      claim = ReplySchedulingClaim.new(
+        token:,
+        generation:,
+        attempt: reply_scheduling_attempts,
+        job_id:
+      )
+    end
+    claim
+  end
+
+  def record_reply_scheduled!(claim, at: Time.current)
+    with_lock do
+      verify_reply_scheduling_claim!(claim)
+      with_reply_scheduling_change do
+        update!(
+          reply_scheduling_status: :enqueued,
+          reply_scheduling_token: nil,
+          reply_scheduling_claimed_at: nil,
+          reply_scheduled_at: at,
+          last_reply_scheduling_error: nil
+        )
+      end
+    end
+    true
+  rescue ConversationActionExecution::ClaimLost
+    false
+  end
+
+  def release_reply_scheduling!(claim, error:, next_attempt_at:)
+    exhausted = false
+    with_lock do
+      verify_reply_scheduling_claim!(claim)
+      exhausted = reply_scheduling_attempts >=
+        MAXIMUM_REPLY_SCHEDULING_ATTEMPTS
+      with_reply_scheduling_change do
+        update!(
+          reply_scheduling_status: exhausted ? :exhausted : :reserved,
+          reply_scheduling_token: nil,
+          reply_scheduling_claimed_at: nil,
+          next_reply_scheduling_at: exhausted ? nil : next_attempt_at,
+          last_reply_scheduling_error: error.to_s.first(2_000)
+        )
+      end
+    end
+    exhausted ? :exhausted : :released
+  rescue ConversationActionExecution::ClaimLost
+    :claim_lost
+  end
+
+  def consume_reply_schedule!(generation:, job_id:, at: Time.current)
+    consumed = false
+    with_lock do
+      next unless action_reply? && status_pending?
+      next unless reply_scheduling_generation == generation.to_i
+      next unless delivery_job_id == job_id.to_s
+      next unless reply_scheduling_claimed? || reply_scheduling_enqueued? ||
+        (reply_scheduling_consumed? &&
+          reply_schedule_consumed_at.present?)
+
+      if !reply_scheduling_consumed?
+        with_reply_scheduling_change do
+          update!(
+            reply_scheduling_status: :consumed,
+            reply_scheduling_token: nil,
+            reply_scheduling_claimed_at: nil,
+            reply_schedule_consumed_at: at
+          )
+        end
+      end
+      consumed = true
+    end
+    consumed
+  end
+
+  def recover_stale_reply_scheduling!(before:, at: Time.current)
+    recovered = false
+    with_lock do
+      stale_claim = reply_scheduling_claimed? &&
+        reply_scheduling_claimed_at &&
+        reply_scheduling_claimed_at < before
+      lost_job = reply_scheduling_enqueued? &&
+        reply_schedule_consumed_at.nil? &&
+        reply_scheduled_at &&
+        reply_scheduled_at < before
+      next unless stale_claim || lost_job
+      next if provider_delivery_claimed?
+
+      with_reply_scheduling_change do
+        update!(
+          reply_scheduling_status: :reserved,
+          reply_scheduling_token: nil,
+          reply_scheduling_claimed_at: nil,
+          next_reply_scheduling_at: at,
+          last_reply_scheduling_error:
+            "A stale reply scheduling owner was recovered."
+        )
+      end
+      recovered = true
+    end
+    recovered
+  end
+
+  def action_reply?
+    ConversationMessages::ThreadedReply.action_kind?(kind)
+  end
+
+  def threaded_reply?
+    kind.in?(ConversationMessages::ThreadedReply::KINDS)
+  end
+
+  def managed_threaded_reply?
+    kind_manual_reply? ||
+      (action_reply? && conversation_action_execution_id.present?)
   end
 
   def provider_delivery_claimed?
@@ -276,7 +457,7 @@ class ConversationMessage < ApplicationRecord
     with_owned_pending_delivery(job_id:) do
       apply_internet_message_id!(mail_message)
       attributes = { delivery_attempted_at: attempted_at }
-      unless kind_manual_reply?
+      unless threaded_reply?
         attributes = ConversationMessages::Content
           .from_mail(mail_message)
           .attributes
@@ -509,12 +690,19 @@ class ConversationMessage < ApplicationRecord
           manual_reminder
           scheduled_reminder
           promise_follow_up
+          due_date_answer
+          payment_status_answer
+          outstanding_amount_answer
+          invoice_resend
+          payment_promise_acknowledgement
+          dispute_acknowledgement
+          recipient_update_acknowledgement
         ]
       )
     end
 
     def delivery_provider_account_id
-      if kind_manual_reply?
+      if threaded_reply?
         requested_provider_account_id
       else
         provider_account_id
@@ -706,25 +894,45 @@ class ConversationMessage < ApplicationRecord
     end
 
     def manual_reply_snapshot_is_complete
-      return unless kind_manual_reply?
+      return unless managed_threaded_reply?
 
       {
         reply_to_message:,
-        actor_user:,
         idempotency_key:,
         requested_provider_account_id:,
         requested_provider_thread_id:,
-        internet_message_id:,
-        delivery_job_id:
+        internet_message_id:
       }.each do |attribute_name, value|
-        errors.add(attribute_name, "must be present for a manual reply") if value.blank?
+        errors.add(attribute_name, "must be present for a threaded reply") if value.blank?
       end
-      errors.add(:body, "must be present for a manual reply") if body.blank?
+      errors.add(:body, "must be present for a threaded reply") if body.blank?
       errors.add(:to_addresses, "must contain exactly one recipient") unless to_addresses.one?
+      if action_reply? && conversation_action_execution.blank?
+        errors.add(
+          :conversation_action_execution,
+          "must be present for an action reply"
+        )
+      elsif kind_manual_reply? && conversation_action_execution.present?
+        errors.add(
+          :conversation_action_execution,
+          "must be blank for a manual reply"
+        )
+      end
+      errors.add(:bcc_addresses, "must be empty for a threaded reply") if
+        bcc_addresses.any?
+      if kind_manual_reply? && delivery_job_id.blank?
+        errors.add(
+          :delivery_job_id,
+          "must be present for a manual reply"
+        )
+      end
+      if kind_manual_reply? && actor_user.blank?
+        errors.add(:actor_user, "must be present for a manual reply")
+      end
     end
 
     def manual_reply_snapshot_is_immutable
-      return unless kind_manual_reply?
+      return unless managed_threaded_reply?
 
       %i[
         account_id
@@ -732,6 +940,8 @@ class ConversationMessage < ApplicationRecord
         invoice_id
         reply_to_message_id
         actor_user_id
+        actor_snapshot
+        conversation_action_execution_id
         requested_provider_account_id
         requested_provider_thread_id
         idempotency_key
@@ -747,9 +957,55 @@ class ConversationMessage < ApplicationRecord
         reference_message_ids
       ].each do |attribute_name|
         if will_save_change_to_attribute?(attribute_name)
+          next if attribute_name == :delivery_job_id &&
+            @reply_scheduling_change_allowed
+
           errors.add(attribute_name, "cannot be changed after the reply is queued")
         end
       end
+    end
+
+    def action_reply_scheduling_is_complete
+      if action_reply? && conversation_action_execution_id.present?
+        errors.add(:reply_scheduling_status, "must be present") if
+          reply_scheduling_status.blank?
+      elsif reply_scheduling_status.present?
+        errors.add(
+          :reply_scheduling_status,
+          "is only available for action replies"
+        )
+      end
+    end
+
+    def action_reply_actor_evidence_is_complete
+      return unless action_reply? && conversation_action_execution_id.present?
+      return if actor_user.present? || actor_snapshot.to_h["id"].present?
+
+      errors.add(
+        :actor_snapshot,
+        "must preserve the approving user identity"
+      )
+    end
+
+    def with_reply_scheduling_change
+      previous = @reply_scheduling_change_allowed
+      @reply_scheduling_change_allowed = true
+      yield
+    ensure
+      @reply_scheduling_change_allowed = previous
+    end
+
+    def verify_reply_scheduling_claim!(claim)
+      reload
+      valid = claim &&
+        reply_scheduling_claimed? &&
+        reply_scheduling_token == claim.token &&
+        reply_scheduling_generation == claim.generation &&
+        delivery_job_id == claim.job_id
+      return if valid
+
+      raise ConversationActionExecution::ClaimLost,
+        "Reply scheduling ownership changed."
     end
 
     def review_completion_is_immutable
@@ -819,7 +1075,16 @@ class ConversationMessage < ApplicationRecord
     end
 
     def app_reserved_pending_delivery?
-      direction_outbound? && status_pending? && delivery_job_id.present?
+      direction_outbound? &&
+        status_pending? &&
+        (
+          delivery_job_id.present? ||
+          (
+            action_reply? &&
+            conversation_action_execution_id.present? &&
+            reply_scheduling_status.present?
+          )
+        )
     end
 
     def set_internet_message_id_digest

@@ -191,7 +191,7 @@ class ConversationActions::TransitionsTest < ActiveSupport::TestCase
 
     %i[action_type origin_kind created_by_user status decided_by_user].each do |field|
       value = {
-        action_type: :other,
+        action_type: :answer_due_date,
         origin_kind: :ai,
         created_by_user: nil,
         status: :pending_approval,
@@ -236,12 +236,12 @@ class ConversationActions::TransitionsTest < ActiveSupport::TestCase
     def create_action
       ConversationActions::Proposal.record!(
         conversation: @conversation,
-        action_type: :answer_due_date,
+        action_type: :other,
         origin_kind: :user,
         created_by_user: @actor,
         user_facing_summary: "Initial summary",
         rationale: nil,
-        arguments: { "source" => "invoice" },
+        arguments: {},
         proposed_reply: {
           "subject" => "Invoice due date",
           "body" => "The invoice is due soon."

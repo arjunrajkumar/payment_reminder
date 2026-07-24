@@ -235,56 +235,10 @@ class ConversationMessages::ManualReply
     end
 
     def validate_composer_freshness!
-      newer_inbound = account.conversation_messages
-        .where(
-          conversation_id: conversation.conversation_group_ids,
-          direction: :inbound,
-          kind: :customer_email,
-          status: :received,
-          provider_account_id: reply_to_message.provider_account_id,
-          provider_thread_id: reply_to_message.provider_thread_id,
-          automatic: false
-        )
-        .where(review_required: false)
-        .or(
-          account.conversation_messages.where(
-            conversation_id: conversation.conversation_group_ids,
-            direction: :inbound,
-            kind: :customer_email,
-            status: :received,
-            provider_account_id: reply_to_message.provider_account_id,
-            provider_thread_id: reply_to_message.provider_thread_id,
-            automatic: false
-          ).where.not(reviewed_at: nil)
-        )
-        .where(
-          "received_at > :received_at OR " \
-            "(received_at = :received_at AND id > :message_id)",
-          received_at: reply_to_message.received_at,
-          message_id: reply_to_message.id
-        )
-        .any? do |message|
-          self.class.reply_target_for(
-            conversation:,
-            reply_to_message: message
-          )
-        end
-      raise StaleComposer, "A newer customer email arrived. Refresh before replying." if newer_inbound
-
-      conflicting_reply = account.conversation_messages
-        .kind_manual_reply
-        .where(
-          requested_provider_account_id: reply_to_message.provider_account_id,
-          requested_provider_thread_id: reply_to_message.provider_thread_id
-        )
-        .where(
-          "status = :pending OR delivery_uncertain = TRUE",
-          pending: ConversationMessage::STATUSES.fetch(:pending)
-        )
-        .exists?
-      if conflicting_reply
-        raise StaleComposer, "Another reply may already have been sent for this thread."
-      end
+      ConversationMessages::ThreadedReply.ensure_fresh!(
+        conversation:,
+        reply_to_message:
+      )
     end
 
     def delivery_connection!

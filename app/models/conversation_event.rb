@@ -24,6 +24,15 @@ class ConversationEvent < ApplicationRecord
     conversation_action_revised: "conversation_action_revised",
     conversation_action_approved: "conversation_action_approved",
     conversation_action_rejected: "conversation_action_rejected",
+    conversation_action_execution_queued: "conversation_action_execution_queued",
+    conversation_action_execution_started: "conversation_action_execution_started",
+    conversation_action_effect_applied: "conversation_action_effect_applied",
+    conversation_action_reply_queued: "conversation_action_reply_queued",
+    conversation_action_execution_succeeded: "conversation_action_execution_succeeded",
+    conversation_action_execution_failed: "conversation_action_execution_failed",
+    conversation_action_execution_unconfirmed: "conversation_action_execution_unconfirmed",
+    conversation_action_execution_canceled: "conversation_action_execution_canceled",
+    conversation_action_execution_reconciled: "conversation_action_execution_reconciled",
     invoice_reminder_notifications_finalized: "invoice_reminder_notifications_finalized",
     collection_hold_placed: "collection_hold_placed",
     collection_hold_released: "collection_hold_released",
@@ -48,6 +57,7 @@ class ConversationEvent < ApplicationRecord
   before_validation :derive_account_from_conversation
 
   validates :metadata, exclusion: { in: [ nil ], message: "can't be blank" }
+  validates :execution_event_key, uniqueness: true, allow_nil: true
   validate :account_matches_conversation
   validate :conversation_message_matches_event
   validate :actor_user_matches_event
@@ -92,6 +102,33 @@ class ConversationEvent < ApplicationRecord
         event.actor_kind = actor_kind
         event.actor_user = actor_user
         event.metadata = metadata
+        event.created_at = created_at
+      end
+    end
+
+    def record_execution_once!(
+      execution:,
+      role:,
+      kind:,
+      conversation_message: nil,
+      metadata: {},
+      created_at: Time.current
+    )
+      key = [
+        "execution",
+        execution.id,
+        role.to_s
+      ].join(":")
+      create_or_find_by!(execution_event_key: key) do |event|
+        event.conversation = execution.conversation_action.conversation.canonical
+        event.conversation_message = conversation_message
+        event.kind = kind
+        event.actor_kind = :system
+        event.metadata = metadata.merge(
+          "conversation_action_id" => execution.conversation_action_id,
+          "conversation_action_execution_id" => execution.id,
+          "event_role" => role.to_s
+        )
         event.created_at = created_at
       end
     end

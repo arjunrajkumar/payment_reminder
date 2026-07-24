@@ -34,8 +34,46 @@ class Conversations::WorkUnitSnapshot
           "message_ids" => Conversations::ReviewWorkUnit
             .message_scope_for_conversation(conversation:)
             .order(:id)
-            .pluck(:id)
+            .pluck(:id),
+          "execution_issues" => execution_issues(conversation),
+          "open_escalations" => open_escalations(conversation)
         }
+      end
+
+      def execution_issues(conversation)
+        ConversationActionExecution
+          .joins(:conversation_action)
+          .where(
+            conversation_actions: {
+              conversation_id: Conversations::ReviewWorkUnit
+                .workflow_conversation_ids_for(conversation:)
+            },
+            attention_required: true
+          )
+          .order(:id)
+          .pluck(:id, :attention_version, :status, :lock_version)
+          .map do |id, attention_version, status, lock_version|
+            {
+              "id" => id,
+              "attention_version" => attention_version,
+              "status" => status,
+              "lock_version" => lock_version
+            }
+          end
+      end
+
+      def open_escalations(conversation)
+        conversation.account.conversation_escalations
+          .where(
+            conversation_id: Conversations::ReviewWorkUnit
+              .workflow_conversation_ids_for(conversation:)
+          )
+          .status_open
+          .order(:id)
+          .pluck(:id, :lock_version)
+          .map do |id, lock_version|
+            { "id" => id, "lock_version" => lock_version }
+          end
       end
 
       def verifier

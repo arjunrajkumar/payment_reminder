@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_24_100000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -67,6 +67,77 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.check_constraint "`status` in (_utf8mb4'active',_utf8mb4'released')", name: "collection_holds_status"
   end
 
+  create_table "conversation_action_executions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.integer "acknowledged_attention_version", default: 0, null: false
+    t.bigint "approved_by_user_id"
+    t.json "approver_snapshot", null: false
+    t.integer "attempts", default: 0, null: false
+    t.boolean "attention_required", default: false, null: false
+    t.integer "attention_version", default: 0, null: false
+    t.integer "claim_generation", default: 0, null: false
+    t.string "claim_token", collation: "utf8mb4_0900_bin"
+    t.datetime "claimed_at"
+    t.bigint "collection_hold_id"
+    t.bigint "conversation_action_id", null: false
+    t.bigint "conversation_action_revision_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_email_address_id"
+    t.bigint "delivery_escalation_id"
+    t.datetime "delivery_finalized_at"
+    t.datetime "effect_applied_at"
+    t.datetime "effect_completed_at"
+    t.bigint "effect_escalation_id"
+    t.string "failure_category"
+    t.text "failure_reason"
+    t.string "finalization_status", default: "not_required", null: false
+    t.datetime "finished_at"
+    t.string "last_scheduling_error", limit: 2000
+    t.integer "lock_version", default: 0, null: false
+    t.datetime "next_retry_at"
+    t.datetime "next_scheduling_at"
+    t.bigint "payment_promise_id"
+    t.string "phase", default: "effect", null: false
+    t.json "reply_snapshot", null: false
+    t.string "result_code"
+    t.json "result_metadata", null: false
+    t.datetime "schedule_consumed_at"
+    t.datetime "scheduled_at"
+    t.integer "scheduling_attempts", default: 0, null: false
+    t.datetime "scheduling_claimed_at"
+    t.integer "scheduling_generation", default: 0, null: false
+    t.string "scheduling_status", default: "reserved", null: false
+    t.string "scheduling_token", collation: "utf8mb4_0900_bin"
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_conversation_action_executions_on_account_id"
+    t.index ["approved_by_user_id"], name: "index_conversation_action_executions_on_approved_by_user_id"
+    t.index ["collection_hold_id"], name: "index_conversation_action_executions_on_collection_hold_id"
+    t.index ["conversation_action_id"], name: "index_conversation_action_executions_on_conversation_action_id", unique: true
+    t.index ["conversation_action_revision_id"], name: "idx_on_conversation_action_revision_id_5570f7b3cf", unique: true
+    t.index ["customer_email_address_id"], name: "idx_on_customer_email_address_id_fee00149cd"
+    t.index ["delivery_escalation_id"], name: "index_conversation_action_executions_on_delivery_escalation_id"
+    t.index ["effect_escalation_id"], name: "index_conversation_action_executions_on_effect_escalation_id"
+    t.index ["finalization_status", "status", "id"], name: "index_action_executions_on_finalization"
+    t.index ["payment_promise_id"], name: "index_conversation_action_executions_on_payment_promise_id"
+    t.index ["scheduling_status", "next_scheduling_at", "id"], name: "index_action_executions_on_due_scheduling"
+    t.index ["scheduling_status", "scheduled_at", "schedule_consumed_at", "id"], name: "index_action_executions_on_lost_scheduling"
+    t.index ["scheduling_status", "scheduling_claimed_at", "id"], name: "index_action_executions_on_stale_scheduling"
+    t.index ["status", "claimed_at", "id"], name: "index_action_executions_on_stale_claims"
+    t.index ["status", "phase", "next_retry_at", "id"], name: "index_action_executions_on_pending_phase"
+    t.check_constraint "((`finalization_status` = _utf8mb4'completed') and (`delivery_finalized_at` is not null)) or ((`finalization_status` <> _utf8mb4'completed') and (`delivery_finalized_at` is null))", name: "conversation_action_executions_finalization"
+    t.check_constraint "((`scheduling_status` = _utf8mb4'claimed') and (`scheduling_token` is not null) and (`scheduling_claimed_at` is not null)) or ((`scheduling_status` <> _utf8mb4'claimed') and (`scheduling_token` is null) and (`scheduling_claimed_at` is null))", name: "conversation_action_executions_schedule_claim"
+    t.check_constraint "((`status` = _utf8mb4'running') and (`claim_token` is not null) and (`claimed_at` is not null)) or ((`status` <> _utf8mb4'running') and (`claim_token` is null) and (`claimed_at` is null))", name: "conversation_action_executions_claim"
+    t.check_constraint "((`status` in (_utf8mb4'succeeded',_utf8mb4'failed',_utf8mb4'uncertain',_utf8mb4'canceled')) and (`finished_at` is not null) and (`phase` = _utf8mb4'finalized')) or ((`status` not in (_utf8mb4'succeeded',_utf8mb4'failed',_utf8mb4'uncertain',_utf8mb4'canceled')) and (`finished_at` is null) and (`phase` <> _utf8mb4'finalized'))", name: "conversation_action_executions_terminal"
+    t.check_constraint "(`acknowledged_attention_version` >= 0) and (`acknowledged_attention_version` <= `attention_version`)", name: "conversation_action_executions_attention_versions"
+    t.check_constraint "(`attempts` >= 0) and (`attempts` <= 5) and (`claim_generation` >= 0)", name: "conversation_action_executions_attempts"
+    t.check_constraint "(`scheduling_attempts` >= 0) and (`scheduling_attempts` <= 5) and (`scheduling_generation` >= 0)", name: "conversation_action_executions_scheduling_attempts"
+    t.check_constraint "`finalization_status` in (_utf8mb4'not_required',_utf8mb4'pending',_utf8mb4'completed')", name: "conversation_action_executions_finalization_status"
+    t.check_constraint "`phase` in (_utf8mb4'effect',_utf8mb4'reply_reservation',_utf8mb4'delivery',_utf8mb4'finalized')", name: "conversation_action_executions_phase"
+    t.check_constraint "`scheduling_status` in (_utf8mb4'reserved',_utf8mb4'claimed',_utf8mb4'enqueued',_utf8mb4'consumed',_utf8mb4'exhausted',_utf8mb4'canceled')", name: "conversation_action_executions_scheduling_status"
+    t.check_constraint "`status` in (_utf8mb4'pending',_utf8mb4'running',_utf8mb4'awaiting_delivery',_utf8mb4'succeeded',_utf8mb4'failed',_utf8mb4'uncertain',_utf8mb4'canceled')", name: "conversation_action_executions_status"
+  end
+
   create_table "conversation_action_revisions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.json "arguments", null: false
     t.string "author_kind", null: false
@@ -100,6 +171,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.datetime "decided_at"
     t.bigint "decided_by_user_id"
     t.bigint "decided_revision_id"
+    t.json "decision_actor_snapshot"
     t.string "decision_idempotency_key"
     t.text "decision_note"
     t.string "idempotency_key", null: false
@@ -171,6 +243,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.bigint "conversation_id", null: false
     t.bigint "conversation_message_id"
     t.datetime "created_at", null: false
+    t.string "execution_event_key", collation: "utf8mb4_0900_bin"
     t.string "kind", null: false
     t.json "metadata", null: false
     t.index ["account_id", "kind", "created_at"], name: "index_conversation_events_on_account_kind_created_at"
@@ -178,15 +251,18 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.index ["conversation_id", "created_at", "id"], name: "index_conversation_events_on_conversation_created_at_id"
     t.index ["conversation_message_id", "kind"], name: "index_conversation_events_on_message_and_kind", unique: true
     t.index ["conversation_message_id"], name: "index_conversation_events_on_conversation_message_id"
+    t.index ["execution_event_key"], name: "index_conversation_events_on_execution_event_key", unique: true
   end
 
   create_table "conversation_messages", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
+    t.json "actor_snapshot"
     t.bigint "actor_user_id"
     t.boolean "automatic", default: false, null: false
     t.json "bcc_addresses", null: false
     t.text "body"
     t.json "cc_addresses", null: false
+    t.bigint "conversation_action_execution_id"
     t.bigint "conversation_id", null: false
     t.datetime "created_at", null: false
     t.datetime "delivery_attempted_at"
@@ -203,9 +279,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.string "internet_message_id_digest", limit: 64, collation: "utf8mb4_0900_bin"
     t.bigint "invoice_id"
     t.string "kind", null: false
+    t.string "last_reply_scheduling_error", limit: 2000
     t.virtual "manual_reminder_delivery_job_id", type: :string, collation: "utf8mb4_0900_bin", as: "if((`kind` = _utf8mb4'manual_reminder'),`delivery_job_id`,NULL)", stored: true
     t.string "matching_method", default: "none", null: false
     t.string "matching_status", default: "matched", null: false
+    t.datetime "next_reply_scheduling_at"
     t.string "provider_account_id", collation: "utf8mb4_0900_bin"
     t.datetime "provider_delivery_started_at"
     t.string "provider_message_id", collation: "utf8mb4_0900_bin"
@@ -213,6 +291,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.string "provider_thread_id", collation: "utf8mb4_0900_bin"
     t.datetime "received_at"
     t.json "reference_message_ids", null: false
+    t.datetime "reply_schedule_consumed_at"
+    t.datetime "reply_scheduled_at"
+    t.integer "reply_scheduling_attempts", default: 0, null: false
+    t.datetime "reply_scheduling_claimed_at"
+    t.integer "reply_scheduling_generation", default: 0, null: false
+    t.string "reply_scheduling_status"
+    t.string "reply_scheduling_token", collation: "utf8mb4_0900_bin"
     t.json "reply_to_addresses", null: false
     t.bigint "reply_to_message_id"
     t.string "requested_provider_account_id", collation: "utf8mb4_0900_bin"
@@ -235,16 +320,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
     t.index ["account_id", "review_required", "reviewed_at", "received_at"], name: "index_conversation_messages_for_review"
     t.index ["account_id"], name: "index_conversation_messages_on_account_id"
     t.index ["actor_user_id"], name: "index_conversation_messages_on_actor_user_id"
+    t.index ["conversation_action_execution_id"], name: "index_action_reply_on_execution", unique: true
     t.index ["conversation_id", "created_at", "id"], name: "index_conversation_messages_on_conversation_created_at_id"
     t.index ["delivery_job_id"], name: "index_conversation_messages_on_delivery_job_id"
     t.index ["email_connection_id"], name: "index_conversation_messages_on_email_connection_id"
     t.index ["invoice_id", "direction", "status", "sent_at"], name: "index_conversation_messages_on_outbound_delivery"
     t.index ["invoice_id"], name: "index_conversation_messages_on_invoice_id"
+    t.index ["kind", "status", "conversation_action_execution_id", "id"], name: "index_action_replies_on_finalization"
     t.index ["manual_reminder_delivery_job_id"], name: "index_manual_reminders_on_delivery_job_id", unique: true
+    t.index ["reply_scheduling_status", "next_reply_scheduling_at", "id"], name: "index_action_replies_on_due_scheduling"
+    t.index ["reply_scheduling_status", "reply_scheduled_at", "reply_schedule_consumed_at", "id"], name: "index_action_replies_on_lost_scheduling"
+    t.index ["reply_scheduling_status", "reply_scheduling_claimed_at", "id"], name: "index_action_replies_on_stale_scheduling"
     t.index ["reply_to_message_id"], name: "index_conversation_messages_on_reply_to_message_id"
     t.index ["reviewed_by_user_id"], name: "index_conversation_messages_on_reviewed_by_user_id"
     t.index ["status", "delivery_attempted_at"], name: "index_conversation_messages_on_pending_delivery_age"
     t.index ["status", "provider_delivery_started_at"], name: "index_conversation_messages_on_provider_delivery_claim"
+    t.check_constraint "((`reply_scheduling_status` = _utf8mb4'claimed') and (`reply_scheduling_token` is not null) and (`reply_scheduling_claimed_at` is not null)) or ((`reply_scheduling_status` <> _utf8mb4'claimed') and (`reply_scheduling_token` is null) and (`reply_scheduling_claimed_at` is null)) or (`reply_scheduling_status` is null)", name: "conversation_messages_action_reply_claim"
+    t.check_constraint "(`reply_scheduling_attempts` >= 0) and (`reply_scheduling_attempts` <= 5) and (`reply_scheduling_generation` >= 0)", name: "conversation_messages_action_reply_attempts"
+    t.check_constraint "(`reply_scheduling_status` is null) or (`reply_scheduling_status` in (_utf8mb4'reserved',_utf8mb4'claimed',_utf8mb4'enqueued',_utf8mb4'consumed',_utf8mb4'exhausted',_utf8mb4'canceled'))", name: "conversation_messages_action_reply_scheduling"
   end
 
   create_table "conversations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -663,6 +756,15 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
   add_foreign_key "collection_holds", "invoices"
   add_foreign_key "collection_holds", "users", column: "placed_by_user_id"
   add_foreign_key "collection_holds", "users", column: "released_by_user_id"
+  add_foreign_key "conversation_action_executions", "accounts"
+  add_foreign_key "conversation_action_executions", "collection_holds", on_delete: :nullify
+  add_foreign_key "conversation_action_executions", "conversation_action_revisions"
+  add_foreign_key "conversation_action_executions", "conversation_actions"
+  add_foreign_key "conversation_action_executions", "conversation_escalations", column: "delivery_escalation_id", on_delete: :nullify
+  add_foreign_key "conversation_action_executions", "conversation_escalations", column: "effect_escalation_id", on_delete: :nullify
+  add_foreign_key "conversation_action_executions", "customer_email_addresses", on_delete: :nullify
+  add_foreign_key "conversation_action_executions", "payment_promises", on_delete: :nullify
+  add_foreign_key "conversation_action_executions", "users", column: "approved_by_user_id", on_delete: :nullify
   add_foreign_key "conversation_action_revisions", "conversation_actions"
   add_foreign_key "conversation_action_revisions", "customers"
   add_foreign_key "conversation_action_revisions", "invoices"
@@ -672,7 +774,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
   add_foreign_key "conversation_actions", "conversation_messages", column: "source_message_id", on_delete: :nullify
   add_foreign_key "conversation_actions", "conversations"
   add_foreign_key "conversation_actions", "users", column: "created_by_user_id"
-  add_foreign_key "conversation_actions", "users", column: "decided_by_user_id"
+  add_foreign_key "conversation_actions", "users", column: "decided_by_user_id", on_delete: :nullify
   add_foreign_key "conversation_escalations", "accounts"
   add_foreign_key "conversation_escalations", "collection_holds", on_delete: :nullify
   add_foreign_key "conversation_escalations", "conversation_actions", on_delete: :nullify
@@ -687,6 +789,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
   add_foreign_key "conversation_events", "conversations"
   add_foreign_key "conversation_events", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "conversation_messages", "accounts"
+  add_foreign_key "conversation_messages", "conversation_action_executions", on_delete: :nullify
   add_foreign_key "conversation_messages", "conversation_messages", column: "reply_to_message_id"
   add_foreign_key "conversation_messages", "conversations"
   add_foreign_key "conversation_messages", "email_connections", on_delete: :nullify

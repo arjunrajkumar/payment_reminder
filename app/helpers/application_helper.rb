@@ -50,6 +50,17 @@ module ApplicationHelper
       "conversation_action_revised" => "Action proposal revised",
       "conversation_action_approved" => "Action approved",
       "conversation_action_rejected" => "Action rejected",
+      "conversation_action_execution_queued" => "Approved command queued",
+      "conversation_action_execution_started" => "Approved command started",
+      "conversation_action_effect_applied" => "Approved command effect applied",
+      "conversation_action_reply_queued" => "Action reply queued",
+      "conversation_action_execution_succeeded" => "Approved command completed",
+      "conversation_action_execution_failed" => "Approved command failed safely",
+      "conversation_action_execution_unconfirmed" =>
+        "Action reply delivery not confirmed",
+      "conversation_action_execution_canceled" => "Approved command canceled",
+      "conversation_action_execution_reconciled" =>
+        "Action reply reconciled from Gmail",
       "collection_hold_placed" => "Automated collection paused",
       "collection_hold_released" => "Collection hold released",
       "conversation_escalated" => "Conversation escalated",

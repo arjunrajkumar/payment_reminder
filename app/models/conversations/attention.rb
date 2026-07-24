@@ -77,6 +77,7 @@ class Conversations::Attention
           latest_unanswered_inbound(messages, conversation),
           latest_manual_reply_failure(messages, conversation),
           latest_pending_action(conversation),
+          latest_action_execution(conversation),
           latest_open_escalation(conversation),
           unknown_attention_at(messages, conversation)
         ].compact.max
@@ -194,6 +195,24 @@ class Conversations::Attention
           )
           .status_open
           .maximum(:last_opened_at)
+      end
+
+      def latest_action_execution(conversation)
+        ConversationActionExecution
+          .joins(:conversation_action)
+          .where(
+            conversation_actions: {
+              conversation_id: Conversations::ReviewWorkUnit
+                .workflow_conversation_ids_for(conversation:)
+            },
+            attention_required: true
+          )
+          .maximum(
+            Arel.sql(
+              "COALESCE(conversation_action_executions.finished_at, " \
+                "conversation_action_executions.updated_at)"
+            )
+          )
       end
 
       def latest_user_acknowledgement(conversation)

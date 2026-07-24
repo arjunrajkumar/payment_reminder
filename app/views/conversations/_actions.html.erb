@@ -1,7 +1,9 @@
 <section class="app-card app-conversation-panel" aria-label="Proposed actions">
   <h2 class="app-card__title">Proposed actions</h2>
   <p class="app-card__description">
-    Approval records a human decision only. It does not send, execute, or change invoice facts.
+    Approval queues the exact deterministic command shown here. Rails refreshes
+    invoice facts when required, applies only the listed effect, and may send the
+    displayed type of threaded reply.
   </p>
 
   <% if actions.empty? %>
@@ -10,6 +12,9 @@
 
   <% actions.each do |action| %>
     <% revision = action.current_revision %>
+    <% preview = ConversationActions::Preview.for(action) if
+      action.status_pending_approval? %>
+    <% execution = action.execution %>
     <article class="app-work-item app-action" id="conversation-action-<%= action.id %>">
       <header class="app-work-item__header">
         <strong><%= action.action_type.humanize %></strong>
@@ -22,12 +27,39 @@
         <% if revision.rationale.present? %>
           <div><dt>Rationale</dt><dd><%= revision.rationale %></dd></div>
         <% end %>
+        <% if preview && (preview.subject.present? || preview.body.present?) %>
+          <div>
+            <dt>Server-generated reply preview</dt>
+            <dd>
+              <strong><%= preview.subject %></strong>
+              <%= simple_format(preview.body) %>
+              <p>
+                Invoice facts will be refreshed and rendered again immediately
+                before execution.
+              </p>
+            </dd>
+          </div>
+          <div>
+            <dt>Verified recipient and thread</dt>
+            <dd>
+              <% if preview.available %>
+                To: <%= preview.recipient %>
+                <% if preview.cc_addresses.any? %>
+                  · CC: <%= preview.cc_addresses.join(", ") %>
+                <% end %>
+              <% else %>
+                A safe recipient or thread is not currently available. Execution
+                will fail safely and return to attention.
+              <% end %>
+            </dd>
+          </div>
+        <% end %>
         <% if revision.proposed_reply.present? %>
           <div>
-            <dt>Proposed reply</dt>
+            <dt>Untrusted proposal reference</dt>
             <dd>
-              <strong><%= revision.proposed_reply["subject"] %></strong>
-              <%= simple_format(revision.proposed_reply["body"]) %>
+              This text is retained as approval evidence but is never sent
+              verbatim or used as the source of invoice facts.
             </dd>
           </div>
         <% end %>
@@ -64,7 +96,7 @@
       <% if action.status_pending_approval? %>
         <% revision_key = SecureRandom.uuid %>
         <details>
-          <summary>Edit human-visible proposal</summary>
+          <summary>Edit executable proposal</summary>
           <%= form_with url: conversation_action_revisions_path(
             conversation,
             action
@@ -89,17 +121,55 @@
               maxlength: ConversationActionRevision::MAXIMUM_RATIONALE_LENGTH,
               rows: 3,
               class: "app-textarea" %>
-            <%= form.label :proposed_reply_subject, "Reply subject", class: "app-field-label" %>
-            <%= form.text_field :proposed_reply_subject,
-              value: revision.proposed_reply["subject"],
-              maxlength: 1_000,
-              class: "app-input" %>
-            <%= form.label :proposed_reply_body, "Reply body", class: "app-field-label" %>
-            <%= form.text_area :proposed_reply_body,
-              value: revision.proposed_reply["body"],
-              maxlength: 10_000,
-              rows: 6,
-              class: "app-textarea" %>
+            <% if action.action_type_record_payment_promise? %>
+              <%= form.label :promised_on, "Promised payment date",
+                class: "app-field-label" %>
+              <%= form.date_field :promised_on,
+                name: "revision[arguments][promised_on]",
+                value: revision.arguments["promised_on"],
+                required: true,
+                class: "app-input" %>
+            <% elsif action.action_type_add_recipient? %>
+              <%= form.label :recipient_email, "Recipient email",
+                class: "app-field-label" %>
+              <%= form.email_field :recipient_email,
+                name: "revision[arguments][email]",
+                value: revision.arguments["email"],
+                required: true,
+                class: "app-input" %>
+              <%= form.label :recipient_mode, "Recipient mode",
+                class: "app-field-label" %>
+              <%= form.select :recipient_mode,
+                [
+                  [ "Future reminders", "future_reminders" ],
+                  [ "Copy this reply only", "cc_current_reply" ]
+                ],
+                { selected: revision.arguments["mode"] },
+                {
+                  name: "revision[arguments][mode]",
+                  class: "app-select"
+                } %>
+            <% end %>
+            <% if preview&.available %>
+              <%= form.label :greeting, "Optional greeting",
+                class: "app-field-label" %>
+              <%= form.text_field :greeting,
+                value: revision.proposed_reply.dig(
+                  "placeholders",
+                  "greeting"
+                ),
+                maxlength: ConversationActions::Catalog::MAXIMUM_NON_FACTUAL_TEXT_LENGTH,
+                class: "app-input" %>
+              <%= form.label :closing, "Optional closing",
+                class: "app-field-label" %>
+              <%= form.text_field :closing,
+                value: revision.proposed_reply.dig(
+                  "placeholders",
+                  "closing"
+                ),
+                maxlength: ConversationActions::Catalog::MAXIMUM_NON_FACTUAL_TEXT_LENGTH,
+                class: "app-input" %>
+            <% end %>
             <%= form.submit "Save new revision", class: "app-secondary-button" %>
           <% end %>
         </details>
@@ -146,12 +216,78 @@
         <p class="app-card__description">
           Revision <%= action.decided_revision.revision_number %>
           was <%= action.status %>
-          by <%= action.decided_by_user&.name || "a former account user" %>
+          by <%= action.decided_by_user&.name ||
+            action.decision_actor_snapshot["name"] ||
+            "a former account user" %>
           at <%= l(action.decided_at, format: :short) %>.
           <% if action.decision_note.present? %>
             <%= action.decision_note %>
           <% end %>
         </p>
+        <% if execution %>
+          <dl class="app-evidence-list">
+            <div>
+              <dt>Execution status</dt>
+              <dd><%= execution.status.humanize %></dd>
+            </div>
+            <div>
+              <dt>Command attempts</dt>
+              <dd><%= execution.attempts %> of <%= ConversationActionExecution::MAXIMUM_ATTEMPTS %></dd>
+            </div>
+            <div>
+              <dt>Approved by</dt>
+              <dd>
+                <%= execution.approved_by_user&.name ||
+                  execution.approver_snapshot["name"] ||
+                  "Former account user" %>
+              </dd>
+            </div>
+            <% if execution.effect_completed_at %>
+              <div>
+                <dt>Local effect</dt>
+                <dd>
+                  <% if execution.effect_applied_at %>
+                    Applied at <%= l(execution.effect_applied_at, format: :short) %>
+                  <% else %>
+                    Completed without a new mutation at
+                    <%= l(execution.effect_completed_at, format: :short) %>
+                  <% end %>
+                  <% if execution.payment_promise %>
+                    · Payment promised for <%= l(execution.payment_promise.promised_on) %>
+                  <% elsif execution.customer_email_address %>
+                    · Recipient <%= execution.customer_email_address.email %>
+                  <% elsif execution.collection_hold %>
+                    · Dispute hold active
+                  <% end %>
+                </dd>
+              </div>
+            <% end %>
+            <% if execution.conversation_message %>
+              <div>
+                <dt>Reply delivery</dt>
+                <dd>
+                  <%= conversation_message_status(execution.conversation_message) %>
+                  · To <%= execution.conversation_message.to_addresses.join(", ") %>
+                  <% if execution.conversation_message.cc_addresses.any? %>
+                    · CC <%= execution.conversation_message.cc_addresses.join(", ") %>
+                  <% end %>
+                  · <%= execution.conversation_message.subject %>
+                  <%= simple_format(execution.conversation_message.body) %>
+                </dd>
+              </div>
+            <% end %>
+            <% if execution.failure_reason.present? %>
+              <div>
+                <dt>Safe failure reason</dt>
+                <dd><%= execution.failure_reason %></dd>
+              </div>
+            <% end %>
+            <div>
+              <dt>Human attention</dt>
+              <dd><%= execution.attention_required? ? "Required" : "Not required" %></dd>
+            </div>
+          </dl>
+        <% end %>
       <% end %>
     </article>
   <% end %>

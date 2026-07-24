@@ -20,11 +20,18 @@ class ConversationMessages::ReconcilePendingDeliveriesJob < ApplicationJob
     cutoff = STALE_AFTER.ago
     reconciled_count = 0
 
-    ConversationMessage.stale_pending_deliveries(before: cutoff).find_each do |message|
+    ConversationMessage.stale_pending_deliveries(before: cutoff)
+      .where(
+        "conversation_action_execution_id IS NULL " \
+          "OR reply_scheduling_status IN ('consumed', 'exhausted')"
+      )
+      .find_each do |message|
       manual_reply = message.kind_manual_reply?
+      action_reply = message.action_reply?
       delivery_was_claimed = message.provider_delivery_claimed?
-      attempted_manual_reply = manual_reply && message.delivery_attempted_at.present?
-      failure_reason = if delivery_was_claimed || attempted_manual_reply
+      attempted_threaded_reply =
+        (manual_reply || action_reply) && message.delivery_attempted_at.present?
+      failure_reason = if delivery_was_claimed || attempted_threaded_reply
         ConversationMessages::ProviderDelivery::UNCONFIRMED_FAILURE_REASON
       else
         FAILURE_REASON
@@ -32,12 +39,14 @@ class ConversationMessages::ReconcilePendingDeliveriesJob < ApplicationJob
       next unless message.reconcile_stale_delivery!(
         before: cutoff,
         failure_reason:,
-        delivery_uncertain: delivery_was_claimed || attempted_manual_reply
+        delivery_uncertain: delivery_was_claimed || attempted_threaded_reply
       )
 
       reconciled_count += 1
       if manual_reply
         ConversationMessages::ManualReplyOutcome.finalize!(message)
+      elsif action_reply
+        ConversationMessages::ActionReplyOutcome.finalize!(message)
       end
     end
 
@@ -45,6 +54,12 @@ class ConversationMessages::ReconcilePendingDeliveriesJob < ApplicationJob
       .needing_finalization
       .find_each do |message|
         ConversationMessages::ManualReplyOutcome.finalize!(message)
+      end
+
+    ConversationMessages::ActionReplyOutcome
+      .needing_finalization
+      .find_each do |message|
+        ConversationMessages::ActionReplyOutcome.finalize!(message)
       end
 
     Rails.logger.warn(

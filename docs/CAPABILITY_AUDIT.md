@@ -194,7 +194,7 @@ Conversation creation, resolution, and reopening are recorded as immutable audit
 user, or future AI actor attribution. This event ledger does not execute actions or change invoices,
 promises, or email delivery state.
 
-### Action, hold, and escalation foundation
+### Human-approved deterministic action execution
 
 The account-user Inbox now exposes the transport-neutral review foundation:
 
@@ -208,12 +208,39 @@ The account-user Inbox now exposes the transport-neutral review foundation:
 - `ConversationEscalation` stores open/resolved human-review work independently from holds.
 - Every transition writes a concise event to the existing append-only conversation ledger.
 
-This foundation does **not** classify messages, call an AI provider, generate replies, execute
-approved actions, refresh providers to answer questions, record promises from actions, resend
-invoices, add recipients, or automatically process disputes. It does not send action-generated
-email. A final locked eligibility handoff immediately before automated provider delivery lets a
-new hold stop a definitely-unsent owned delivery; a provider request whose handoff has already
-started cannot be recalled.
+Approval now durably creates one execution for the exact approved revision. Initial execution and
+action-reply delivery each use a database-backed scheduling reservation with bounded attempts,
+backoff, ownership generations, and stale-owner recovery. Replaced jobs and claim tokens cannot
+write effects, replies, events, escalations, or terminal state.
+
+Rails validates a strict action catalog before approval, refreshes provider invoice state outside
+database transactions when facts are required, and revalidates ownership and current authorization
+under the established lock order. The deterministic local-effect phase commits before a separate,
+replay-safe reply-reservation phase. Reconciliation can therefore resume after either commit
+without applying a payment promise, recipient update, or dispute hold twice, and a reply problem
+cannot roll the local effect back.
+
+Implemented commands record a payment promise, answer due-date/payment-status/outstanding-amount
+questions, resend a safe provider-hosted invoice URL, add a future reminder recipient or one-time
+CC, place a dispute hold and escalation, or route unsupported `other` work to a person. Rails owns
+all factual wording; proposal text is retained as untrusted approval evidence and is never the
+source of invoice facts.
+
+Reviewers can append a revision that corrects the allowlisted structured arguments and bounded
+non-factual greeting or closing. Arbitrary proposed subject/body prose remains historical evidence
+and cannot control facts or side effects. Preview and reservation use the same composition path;
+completed history displays the immutable reserved message rather than recomputing current facts.
+
+Action replies preserve the verified customer recipient, Gmail thread, RFC reply headers, mailbox
+identity, credential generation, immutable message identity, bounded scheduling/delivery attempts,
+and Gmail SENT reconciliation used by manual replies. Definite failure and uncertain handoff are
+distinct. Uncertain delivery is never retried automatically, and later Gmail SENT import repairs
+execution state without erasing the earlier uncertainty audit. Delivery-failure escalation evidence
+is separate from the command's dispute escalation, so repair never releases the dispute hold.
+Decision and reply actor snapshots retain historical identity after a user is removed.
+
+AI classification, prompt/model calls, shadow-mode planning, automatic execution allowlists,
+customer-specific learning, and daily summaries are **not** implemented.
 
 ### Future customer-specific AI learning boundary
 
@@ -243,8 +270,9 @@ merged across `Customer` records without a separate identity-merging feature.
 - `promise_follow_up` for an overdue payment-promise follow-up;
 - `customer_reply` for the manually recorded inbound source of a payment promise;
 - `customer_email` for imported inbound email and `manual_email` for mail sent directly in Gmail;
-- `due_date_answer`, `payment_status_answer`, `invoice_resend`, and
-  `dispute_acknowledgement` for future assistant responses.
+- `due_date_answer`, `payment_status_answer`, `outstanding_amount_answer`, `invoice_resend`,
+  `payment_promise_acknowledgement`, `recipient_update_acknowledgement`, and
+  `dispute_acknowledgement` for approved deterministic responses.
 
 Scheduled reminders, operator-initiated manual reminders, promise follow-ups, manually recorded
 customer replies, and screened Gmail imports have complete producers. Gmail ingestion is
@@ -259,8 +287,8 @@ manual replies are available in the account-user Conversation Inbox.
 - The application has durable records for webhook events, delivery failures, reminder
   suppressions, sessions, external identities, provider data, and synchronization errors, but no
   user-facing diagnostic console.
-- Ordinary users have no one-off reminder, deterministic action execution, resend, failed-stage
-  retry, or manual payment-promise UI.
+- Ordinary users have no one-off reminder, failed-stage retry, or free-form manual payment-promise
+  UI outside approved deterministic actions.
 
 ## Platform administrator panel
 

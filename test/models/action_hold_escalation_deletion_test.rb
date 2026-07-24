@@ -288,7 +288,7 @@ class ActionHoldEscalationDeletionTest < ActiveSupport::TestCase
       conversation = Conversation.for_invoice!(invoice:)
       action = ConversationActions::Proposal.record!(
         conversation:,
-        action_type: :open_dispute,
+        action_type: :other,
         origin_kind: :user,
         created_by_user: actor,
         user_facing_summary: "Invoice deletion workflow.",

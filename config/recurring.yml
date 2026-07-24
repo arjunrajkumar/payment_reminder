@@ -28,6 +28,9 @@ production:
   reconcile_invoice_reminder_notifications:
     class: InvoiceReminders::ReconcileNotificationDeliveriesJob
     schedule: every 15 minutes
+  reconcile_conversation_action_executions:
+    class: ConversationActions::ReconcileExecutionsJob
+    schedule: every 15 minutes at second 30
   poll_gmail_inbound:
     class: EmailConnections::PollInboundJob
     schedule: every 15 minutes

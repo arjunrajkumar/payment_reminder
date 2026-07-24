@@ -11,8 +11,9 @@ class ConversationActions::Revision
     rationale:,
     proposed_reply: nil,
     base_revision_id: nil,
-    proposed_reply_subject: nil,
-    proposed_reply_body: nil,
+    arguments: nil,
+    greeting: nil,
+    closing: nil,
     idempotency_key:,
     snapshot_token:,
     at: Time.current
@@ -24,8 +25,9 @@ class ConversationActions::Revision
     @rationale = rationale
     @proposed_reply = proposed_reply
     @base_revision_id = base_revision_id&.to_i
-    @proposed_reply_subject = proposed_reply_subject
-    @proposed_reply_body = proposed_reply_body
+    @arguments = arguments
+    @greeting = greeting
+    @closing = closing
     @idempotency_key = idempotency_key.to_s.strip
     @snapshot_token = snapshot_token
     @at = at
@@ -64,6 +66,13 @@ class ConversationActions::Revision
         raise ConversationActions::StaleControl,
           ConversationActions::ActionSnapshot::ERROR_MESSAGE
       end
+      next_arguments = arguments_for(previous)
+      next_proposed_reply = proposed_reply_for(previous)
+      ConversationActions::Catalog.validate!(
+        action_type: action.action_type,
+        arguments: next_arguments,
+        proposed_reply: next_proposed_reply
+      )
       revision = action.revisions.create!(
         revision_number: previous.revision_number + 1,
         invoice: owner.invoice,
@@ -72,8 +81,8 @@ class ConversationActions::Revision
         author_user:,
         user_facing_summary:,
         rationale:,
-        arguments: previous.arguments.deep_dup,
-        proposed_reply: proposed_reply_for(previous),
+        arguments: next_arguments,
+        proposed_reply: next_proposed_reply,
         idempotency_key:,
         created_at: at,
         updated_at: at
@@ -110,8 +119,9 @@ class ConversationActions::Revision
       :rationale,
       :proposed_reply,
       :base_revision_id,
-      :proposed_reply_subject,
-      :proposed_reply_body,
+      :arguments,
+      :greeting,
+      :closing,
       :idempotency_key,
       :snapshot_token,
       :at
@@ -146,8 +156,8 @@ class ConversationActions::Revision
             record = name == :id ? base : revision
             record.public_send(name) == value
           end &&
-          revision.proposed_reply["subject"].to_s == proposed_reply_subject.to_s &&
-          revision.proposed_reply["body"].to_s == proposed_reply_body.to_s
+          revision.arguments == arguments_for(base) &&
+          revision.proposed_reply == proposed_reply_for(base)
         return revision if exact
       else
         expected[:proposed_reply] = proposed_reply
@@ -167,10 +177,34 @@ class ConversationActions::Revision
     def proposed_reply_for(previous)
       return proposed_reply unless editable_reply?
 
-      previous.proposed_reply.deep_dup.merge(
-        "subject" => proposed_reply_subject.to_s,
-        "body" => proposed_reply_body.to_s
-      )
+      value = previous.proposed_reply.deep_dup.except("subject", "body")
+      value["template_version"] ||= ConversationActions::Catalog::TEMPLATE_VERSION
+      placeholders = value.fetch("placeholders", {}).deep_dup
+      { "greeting" => greeting, "closing" => closing }.each do |name, text|
+        normalized = text.to_s.strip.presence
+        normalized ? placeholders[name] = normalized : placeholders.delete(name)
+      end
+      value["placeholders"] = placeholders
+      value
+    end
+
+    def arguments_for(previous)
+      return previous.arguments.deep_dup unless editable_reply?
+
+      supplied = arguments.to_h.stringify_keys
+      return previous.arguments.deep_dup if supplied.empty? &&
+        previous.arguments.present?
+      case action.action_type
+      when "record_payment_promise"
+        { "promised_on" => supplied.fetch("promised_on") }
+      when "add_recipient"
+        {
+          "email" => supplied.fetch("email"),
+          "mode" => supplied.fetch("mode")
+        }
+      else
+        {}
+      end
     end
 
     def repair_attention(result)

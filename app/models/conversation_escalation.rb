@@ -102,6 +102,40 @@ class ConversationEscalation < ApplicationRecord
     )
   end
 
+  def resolve_by_system!(reason:, idempotency_key:, at: Time.current)
+    key = "system:#{idempotency_key.to_s.strip}"
+    with_lock do
+      return self if status_resolved? &&
+        transition_idempotency_key == key
+      return self if status_resolved?
+
+      with_audited_update(:transition) do
+        update!(
+          status: :resolved,
+          resolved_by_user: nil,
+          resolved_at: at,
+          resolution_note: reason.to_s.first(4_000),
+          transition_idempotency_key: key
+        )
+      end
+      clear_linked_execution_attention
+      ConversationEvent.record!(
+        conversation:,
+        kind: :conversation_escalation_resolved,
+        actor_kind: :system,
+        metadata: {
+          "conversation_escalation_id" => id,
+          "from_status" => "open",
+          "to_status" => "resolved",
+          "rationale" => reason.to_s.first(4_000),
+          "transition_idempotency_key" => key
+        },
+        created_at: at
+      )
+    end
+    self
+  end
+
   def transfer_to_conversation!(target, validated_message_ids:)
     previous_message_ids = validated_work_unit_message_ids
     self.validated_work_unit_message_ids = validated_message_ids
@@ -221,6 +255,8 @@ class ConversationEscalation < ApplicationRecord
           }
         end
         with_audited_update(:transition) { update!(attributes) }
+        clear_linked_execution_attention if to == :resolved
+        reopen_linked_execution_attention if to == :open
         ConversationEvent.record!(
           conversation:,
           kind: to == :resolved ?
@@ -261,6 +297,22 @@ class ConversationEscalation < ApplicationRecord
 
       raise ConversationEscalations::InvalidTransition,
         "This escalation has already changed."
+    end
+
+    def clear_linked_execution_attention
+      linked = ConversationActionExecution.where(effect_escalation_id: id)
+        .or(
+          ConversationActionExecution.where(delivery_escalation_id: id)
+        )
+      linked.find_each(&:clear_resolved_attention!)
+    end
+
+    def reopen_linked_execution_attention
+      linked = ConversationActionExecution.where(effect_escalation_id: id)
+        .or(
+          ConversationActionExecution.where(delivery_escalation_id: id)
+        )
+      linked.find_each(&:mark_attention!)
     end
 
     def transition_event_for(idempotency_key)
@@ -347,7 +399,11 @@ class ConversationEscalation < ApplicationRecord
         if resolved_by_user.present? || resolved_at.present? || resolution_note.present?
           errors.add(:base, "open escalations cannot have resolution fields")
         end
-      elsif resolved_by_user.blank? || resolved_at.blank?
+      elsif resolved_at.blank? ||
+          (
+            resolved_by_user.blank? &&
+            !transition_idempotency_key.to_s.start_with?("system:")
+          )
         errors.add(:base, "resolved escalations require an actor and timestamp")
       end
       if resolved_by_user.present? && account.present? &&

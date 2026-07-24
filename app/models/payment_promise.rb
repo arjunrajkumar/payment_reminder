@@ -29,6 +29,7 @@ class PaymentPromise < ApplicationRecord
   validate :follow_up_message_matches_promise
   validate :follow_up_message_has_expected_kind
   validate :only_one_active_promise
+  validate :dates_fit_database
 
   before_validation :synchronize_derived_fields
   before_save :synchronize_derived_fields
@@ -169,8 +170,17 @@ class PaymentPromise < ApplicationRecord
     end
 
     def synchronize_derived_fields
-      self.follow_up_on = promised_on + 1.day if promised_on.present?
+      self.follow_up_on = promised_on.next_day if promised_on.present? &&
+        promised_on <= Date.new(9999, 12, 30)
       self.active_invoice_id = status_active? ? invoice_id : nil
+    end
+
+    def dates_fit_database
+      supported = Date.new(1000, 1, 1)..Date.new(9999, 12, 31)
+      errors.add(:promised_on, "is outside the supported range") if
+        promised_on.present? && !supported.cover?(promised_on)
+      errors.add(:follow_up_on, "is outside the supported range") if
+        follow_up_on.present? && !supported.cover?(follow_up_on)
     end
 
     def account_matches_invoice

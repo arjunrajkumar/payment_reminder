@@ -45,7 +45,21 @@ class Conversations::Detail
       .includes(
         :created_by_user,
         :decided_by_user,
-        revisions: :author_user
+        :source_message,
+        execution: [
+          :approved_by_user,
+          :conversation_message,
+          :payment_promise,
+          :customer_email_address,
+          :collection_hold,
+          :effect_escalation,
+          :delivery_escalation
+        ],
+        revisions: [
+          :author_user,
+          :customer,
+          { invoice: [ :customer, :invoice_source ] }
+        ]
       )
       .order(created_at: :desc, id: :desc)
       .to_a

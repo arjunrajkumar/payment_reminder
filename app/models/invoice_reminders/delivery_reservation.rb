@@ -33,49 +33,51 @@ class InvoiceReminders::DeliveryReservation
   def call
     reservation = nil
 
-    invoice.with_lock do
-      decision = stage_decision
-      unless decision.deliverable?
-        persist_suppression(decision) if decision.suppression?
-        reservation = skipped(decision)
-        next
+    Receivables::AccountLock.synchronize(account: invoice.account) do
+      invoice.with_lock do
+        decision = stage_decision
+        unless decision.deliverable?
+          persist_suppression(decision) if decision.suppression?
+          reservation = skipped(decision)
+          next
+        end
+
+        mail_message = InvoiceReminderMailer.reminder(invoice, decision.stage).message
+        reminder = decision.reminder || reserve_new_reminder(decision, mail_message:)
+
+        unless reminder
+          reservation = skipped_reason(:outbound_delivery_in_progress, stage: decision.stage)
+          next
+        end
+
+        message = reminder.conversation_message
+        unless message.bind_delivery_mailbox!(
+          connection: decision.connection,
+          job_id: delivery_job_id
+        )
+          reservation = skipped_reason(:email_connection_replaced, stage: decision.stage)
+          next
+        end
+
+        message.apply_internet_message_id!(mail_message)
+
+        if decision.reminder && !message.refresh_delivery_attempt!(
+          job_id: delivery_job_id,
+          mail_message:
+        )
+          reservation = skipped_reason(:delivery_reservation_conflict, stage: decision.stage)
+          next
+        end
+
+        reservation = Result.new(
+          reminder:,
+          stage: decision.stage,
+          connection: decision.connection,
+          mail_message:,
+          reason: nil,
+          context: {}
+        )
       end
-
-      mail_message = InvoiceReminderMailer.reminder(invoice, decision.stage).message
-      reminder = decision.reminder || reserve_new_reminder(decision, mail_message:)
-
-      unless reminder
-        reservation = skipped_reason(:outbound_delivery_in_progress, stage: decision.stage)
-        next
-      end
-
-      message = reminder.conversation_message
-      unless message.bind_delivery_mailbox!(
-        connection: decision.connection,
-        job_id: delivery_job_id
-      )
-        reservation = skipped_reason(:email_connection_replaced, stage: decision.stage)
-        next
-      end
-
-      message.apply_internet_message_id!(mail_message)
-
-      if decision.reminder && !message.refresh_delivery_attempt!(
-        job_id: delivery_job_id,
-        mail_message:
-      )
-        reservation = skipped_reason(:delivery_reservation_conflict, stage: decision.stage)
-        next
-      end
-
-      reservation = Result.new(
-        reminder:,
-        stage: decision.stage,
-        connection: decision.connection,
-        mail_message:,
-        reason: nil,
-        context: {}
-      )
     end
 
     reservation
@@ -128,7 +130,9 @@ class InvoiceReminders::DeliveryReservation
         category: decision.stage.category,
         day_offset: decision.stage.day_offset,
         stage_key: decision.stage.key,
-        tone: decision.stage.tone.to_s
+        tone: decision.stage.tone.to_s,
+        terminal_at_delivery: decision.stage.category_overdue? &&
+          decision.stage.terminal?
       )
     end
 

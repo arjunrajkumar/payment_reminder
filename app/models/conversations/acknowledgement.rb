@@ -15,5 +15,10 @@ class Conversations::Acknowledgement
         visible_message_ids: snapshot.fetch("message_ids")
       )
     end
+    Conversations::Attention.recompute!(
+      conversation:,
+      actor_user:,
+      at:
+    )
   end
 end

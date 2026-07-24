@@ -61,6 +61,45 @@ class EmailMessageReceipts::ProcessPendingJobTest < ActiveJob::TestCase
     end
   end
 
+  test "schedules unfinished processed finalization after mailbox replacement" do
+    processed = create_receipt("processed-finalization")
+    message = invoices(:xero_invoice).conversation_messages.create!(
+      account: @connection.account,
+      conversation: Conversation.for_invoice!(
+        invoice: invoices(:xero_invoice)
+      ),
+      direction: :outbound,
+      kind: :scheduled_reminder,
+      status: :sent,
+      sent_at: Time.current,
+      provider_message_id: "processed-finalization-provider"
+    )
+    processed.update_columns(
+      status: "processed",
+      conversation_message_id: message.id,
+      direction: "outbound",
+      processed_at: Time.current,
+      post_processing_finalized_at: nil
+    )
+    @connection.update_column(
+      :provider_account_id,
+      "replacement-finalization-provider"
+    )
+
+    assert_enqueued_jobs 1, only: EmailMessageReceipts::ProcessJob do
+      2.times { EmailMessageReceipts::ProcessPendingJob.perform_now }
+    end
+    scheduled = enqueued_jobs.sole
+    assert_equal [
+      processed.id,
+      processed.provider_account_id,
+      processed.email_connection_generation
+    ], scheduled.fetch(:args)
+    assert_equal scheduled.fetch("job_id"),
+      processed.reload.post_processing_enqueued_job_id
+    assert processed.post_processing_enqueued_at
+  end
+
   private
     def create_receipt(suffix)
       @connection.email_message_receipts.create!(

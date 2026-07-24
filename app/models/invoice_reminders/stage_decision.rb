@@ -1,5 +1,6 @@
 class InvoiceReminders::StageDecision
   SUPPRESSION_REASONS = %w[
+    active_collection_hold
     active_payment_promise
     recent_outbound_message
   ].freeze
@@ -67,12 +68,20 @@ class InvoiceReminders::StageDecision
     unless stage_due?(stage, reminder:)
       return skipped(:stage_not_due, stage:, due_on: invoice.due_on || "none")
     end
+    hold_suppression = active_hold_suppression_for(invoice)
+    if hold_suppression
+      return skipped(
+        hold_suppression.fetch(:reason),
+        stage:,
+        **hold_suppression.fetch(:context)
+      )
+    end
     unless invoice.customer.reminder_email_addresses.any?
       return skipped(:missing_email, stage:, customer_id: invoice.customer_id)
     end
 
-    suppression_reason = suppression_reason_for(invoice)
-    return skipped(suppression_reason, stage:) if suppression_reason
+    suppression = suppression_for(invoice)
+    return skipped(suppression.fetch(:reason), stage:, **suppression.fetch(:context)) if suppression
 
     Result.new(
       stage:,
@@ -118,14 +127,29 @@ class InvoiceReminders::StageDecision
       stage.due_for?(invoice, on: reminder.created_at.in_time_zone.to_date)
     end
 
-    def suppression_reason_for(invoice)
-      return :active_payment_promise if invoice.payment_promises.status_active.exists?
+    def suppression_for(invoice)
+      if invoice.payment_promises.status_active.exists?
+        return { reason: :active_payment_promise, context: {} }
+      end
 
       recently_contacted = invoice.conversation_messages
         .successful_outbound
         .sent_after(ConversationMessage::OUTBOUND_CONTACT_COOLDOWN.ago)
         .exists?
-      :recent_outbound_message if recently_contacted
+      { reason: :recent_outbound_message, context: {} } if recently_contacted
+    end
+
+    def active_hold_suppression_for(invoice)
+      holds = invoice.active_collection_holds.reorder(:id).to_a
+      return if holds.empty?
+
+      {
+        reason: :active_collection_hold,
+        context: {
+          collection_hold_ids: holds.map(&:id),
+          collection_hold_reasons: holds.map(&:reason).uniq
+        }
+      }
     end
 
     def skipped(reason, stage: nil, **context)

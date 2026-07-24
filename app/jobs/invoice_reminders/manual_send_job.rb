@@ -43,6 +43,20 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
 
   private
     def deliver(invoice:, reservation:)
+      unless reservation.message.claim_provider_delivery!(job_id:)
+        log_skip(
+          invoice:,
+          result: InvoiceReminders::ManualDeliveryReservation::Result.new(
+            message: nil,
+            connection: nil,
+            mail_message: nil,
+            reason: "delivery_state_changed",
+            context: {}
+          )
+        )
+        return
+      end
+
       delivery_result = ConversationMessages::ProviderDelivery.call(
         account: invoice.account,
         connection: reservation.connection,
@@ -69,7 +83,8 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
       else
         reservation.message.mark_delivery_failed!(
           job_id:,
-          failure_reason: delivery_result.failure_reason
+          failure_reason: delivery_result.failure_reason,
+          delivery_uncertain: delivery_result.delivery_uncertain
         )
       end
     end
@@ -90,7 +105,8 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
 
       message&.mark_delivery_failed!(
         job_id:,
-        failure_reason: "Manual reminder was not delivered (#{reason || "unknown_reason"})."
+        failure_reason: "Manual reminder was not delivered (#{reason || "unknown_reason"}).",
+        delivery_uncertain: message.provider_delivery_claimed?
       ) || false
     end
 

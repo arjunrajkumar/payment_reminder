@@ -1,0 +1,2 @@
+module Receivables
+end

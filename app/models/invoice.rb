@@ -23,6 +23,10 @@ class Invoice < ApplicationRecord
     -> { order(created_at: :desc, id: :desc) },
     dependent: :destroy,
     inverse_of: :invoice
+  has_many :collection_holds,
+    -> { order(placed_at: :desc, id: :desc) },
+    dependent: :destroy,
+    inverse_of: :invoice
   before_destroy :destroy_conversation_messages_in_dependency_order
   has_many :conversation_messages,
     -> { order(created_at: :desc, id: :desc) },
@@ -101,6 +105,14 @@ class Invoice < ApplicationRecord
     return "outstanding" if outstanding?
 
     status
+  end
+
+  def active_collection_holds
+    collection_holds.status_active
+  end
+
+  def collection_held?
+    active_collection_holds.exists?
   end
 
   def online_invoice_url

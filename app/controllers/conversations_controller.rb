@@ -14,10 +14,13 @@ class ConversationsController < ApplicationController
   end
 
   def show
-    return redirect_to conversation_path(@conversation.canonical) if
-      @conversation.canonical_conversation_id.present?
+    owner = Conversations::ReviewWorkUnit.reconcile_workflow_owner!(
+      conversation: @conversation
+    )
+    return redirect_to conversation_path(owner) unless @conversation == owner
 
-    @detail = Conversations::Detail.call(conversation: @conversation)
+    @conversation = owner
+    @detail = Conversations::Detail.call(conversation: owner)
     @health = EmailConnection::InboxHealth.call(account: Current.account)
   end
 

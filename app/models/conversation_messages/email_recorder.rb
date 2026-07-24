@@ -25,10 +25,64 @@ class ConversationMessages::EmailRecorder
         receipt.reconsider_unrelated_thread_receipts!(anchor_message: existing)
       end
     end
-    existing.invoice ? existing.invoice.with_lock(&record_link) : record_link.call
-    Conversations::Attention.clear_for_outbound!(existing) if
-      existing.kind_manual_reply? && existing.status_sent?
+    Receivables::AccountLock.synchronize(account: receipt.account) do
+      if existing.invoice
+        existing.invoice.with_lock(&record_link)
+      else
+        record_link.call
+      end
+    end
+    finalize_existing_delivery!(existing)
     existing
+  end
+
+  def self.finalize_existing_delivery!(existing)
+    return existing unless existing&.status_sent?
+
+    if existing.kind_manual_reply?
+      Conversations::Attention.clear_for_outbound!(existing)
+      ConversationMessages::ManualReplyOutcome.finalize!(existing)
+    elsif existing.kind_promise_follow_up?
+      existing.payment_promise_follow_up&.confirm_imported_follow_up!(
+        message: existing
+      )
+    elsif existing.kind_scheduled_reminder?
+      reminder = existing.invoice_reminder
+      InvoiceReminders::Notifier.deliver_once(
+        invoice: existing.invoice,
+        reminder:,
+        terminal: reminder.terminal_stage?
+      ) if reminder
+    end
+    existing
+  end
+
+  def self.app_created_delivery_for(
+    account:,
+    parsed_message:,
+    direction:,
+    provider_account_id:
+  )
+    return unless direction.to_s == "outbound"
+    return if parsed_message.internet_message_id.blank?
+
+    digest = Digest::SHA256.hexdigest(parsed_message.internet_message_id)
+    account.conversation_messages
+      .where(
+        kind: %i[
+          manual_reply
+          manual_reminder
+          scheduled_reminder
+          promise_follow_up
+        ]
+      )
+      .where(
+        "requested_provider_account_id = :provider_account_id " \
+          "OR provider_account_id = :provider_account_id",
+        provider_account_id:
+      )
+      .where(internet_message_id_digest: digest)
+      .find_by(internet_message_id: parsed_message.internet_message_id)
   end
 
   def initialize(account:, receipt:, parsed_message:, direction:, match:, job_id:, provider_account_id:)
@@ -51,8 +105,8 @@ class ConversationMessages::EmailRecorder
       if existing = provider_messages.find_by(provider_message_id: message.provider_message_id)
         return self.class.link_existing(receipt:, existing:, job_id:)
       end
-      if existing_reply = app_created_reply
-        return reconcile_app_created_reply(existing_reply)
+      if existing_delivery = app_created_delivery
+        return reconcile_app_created_delivery(existing_delivery)
       end
 
       with_invoice_lock(matched_invoice) { record_new_message }
@@ -76,6 +130,9 @@ class ConversationMessages::EmailRecorder
         conversation = resolve_conversation
         recorded_message = conversation.conversation_messages.create!(message_attributes(conversation))
         record_event(recorded_message)
+        Conversations::ReviewWorkUnit.reconcile_workflow_owner!(
+          conversation: recorded_message.conversation
+        )
         raise EmailMessageReceipt::ClaimLost unless complete_receipt!(recorded_message)
         receipt.reconsider_unrelated_thread_receipts!(anchor_message: recorded_message)
 
@@ -90,7 +147,9 @@ class ConversationMessages::EmailRecorder
     end
 
     def with_invoice_lock(invoice, &block)
-      invoice ? invoice.with_lock(&block) : block.call
+      Receivables::AccountLock.synchronize(account:) do
+        invoice ? invoice.with_lock(&block) : block.call
+      end
     end
 
     def resolve_conversation
@@ -192,7 +251,7 @@ class ConversationMessages::EmailRecorder
         conversation_message:,
         direction: conversation_message.direction,
         provider_thread_id: message.provider_thread_id.presence || conversation_message.provider_thread_id,
-        metadata: existing ? { "existing_message" => true } : receipt_metadata
+        metadata: existing ? { "existing_message" => true } : receipt_metadata(conversation_message)
       )
     end
 
@@ -212,18 +271,16 @@ class ConversationMessages::EmailRecorder
       account.conversation_messages.where(provider_account_id:)
     end
 
-    def app_created_reply
-      return if direction != "outbound" || message.internet_message_id.blank?
-
-      digest = Digest::SHA256.hexdigest(message.internet_message_id)
-      account.conversation_messages
-        .kind_manual_reply
-        .where(requested_provider_account_id: provider_account_id)
-        .where(internet_message_id_digest: digest)
-        .find_by(internet_message_id: message.internet_message_id)
+    def app_created_delivery
+      self.class.app_created_delivery_for(
+        account:,
+        parsed_message: message,
+        direction:,
+        provider_account_id:
+      )
     end
 
-    def reconcile_app_created_reply(existing)
+    def reconcile_app_created_delivery(existing)
       newly_confirmed = false
 
       with_invoice_lock(existing.invoice) do
@@ -231,12 +288,17 @@ class ConversationMessages::EmailRecorder
           raise EmailMessageReceipt::ClaimLost unless receipt.provider_account_id == provider_account_id
 
           newly_confirmed = !existing.status_sent? || existing.provider_message_id.blank?
-          unless existing.reconcile_imported_manual_reply!(
+          unless existing.reconcile_imported_app_delivery!(
             receipt:,
             parsed_message: message,
             provider_account_id:
           )
             raise EmailMessageReceipt::ClaimLost
+          end
+          if existing.kind_promise_follow_up?
+            existing.payment_promise_follow_up&.confirm_imported_follow_up!(
+              message: existing
+            )
           end
           raise EmailMessageReceipt::ClaimLost unless complete_receipt!(existing)
           receipt.reconsider_unrelated_thread_receipts!(anchor_message: existing)
@@ -244,9 +306,22 @@ class ConversationMessages::EmailRecorder
       end
 
       if newly_confirmed
-        ConversationMessages::ManualReplyOutcome.finalize!(existing.reload)
+        finalize_reconciled_delivery(existing.reload)
       end
       existing
+    end
+
+    def finalize_reconciled_delivery(existing)
+      if existing.kind_manual_reply?
+        ConversationMessages::ManualReplyOutcome.finalize!(existing)
+      elsif existing.kind_scheduled_reminder?
+        reminder = existing.invoice_reminder
+        InvoiceReminders::Notifier.deliver_once(
+          invoice: existing.invoice,
+          reminder:,
+          terminal: reminder.terminal_stage?
+        )
+      end
     end
 
     def apply_attention(recorded_message)
@@ -254,13 +329,21 @@ class ConversationMessages::EmailRecorder
       if recorded_message.direction_outbound? && !recorded_message.awaiting_review?
         Conversations::Attention.clear_for_outbound!(recorded_message)
       end
+      Conversations::Attention.recompute!(
+        conversation: recorded_message.conversation
+      )
     end
 
     def conversation_customer_assigned?
       @conversation_customer_assigned == true
     end
 
-    def receipt_metadata
+    def receipt_metadata(conversation_message)
+      return {
+        "app_created_delivery_reconciled" => true,
+        "delivery_kind" => conversation_message.kind
+      } unless match
+
       {
         "matching_status" => match.matching_status,
         "matching_method" => match.matching_method

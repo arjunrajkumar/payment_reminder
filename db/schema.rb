@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_150000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -26,6 +26,142 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
     t.index ["name"], name: "index_accounts_on_name"
+  end
+
+  create_table "collection_holds", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "conversation_action_id"
+    t.bigint "conversation_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_id"
+    t.json "customer_snapshot", null: false
+    t.string "idempotency_key", null: false
+    t.json "in_flight_delivery_message_ids", null: false
+    t.bigint "invoice_id", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.text "note"
+    t.datetime "placed_at", null: false
+    t.string "placed_by_kind", null: false
+    t.bigint "placed_by_user_id"
+    t.string "reason", null: false
+    t.string "release_idempotency_key"
+    t.text "release_note"
+    t.datetime "released_at"
+    t.bigint "released_by_user_id"
+    t.bigint "source_message_id"
+    t.string "status", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "idempotency_key"], name: "index_collection_holds_on_account_and_idempotency", unique: true
+    t.index ["account_id"], name: "index_collection_holds_on_account_id"
+    t.index ["conversation_action_id"], name: "index_collection_holds_on_conversation_action_id"
+    t.index ["conversation_id", "status"], name: "index_collection_holds_on_conversation_id_and_status"
+    t.index ["conversation_id"], name: "index_collection_holds_on_conversation_id"
+    t.index ["customer_id"], name: "index_collection_holds_on_customer_id"
+    t.index ["invoice_id", "status"], name: "index_collection_holds_on_invoice_id_and_status"
+    t.index ["invoice_id"], name: "index_collection_holds_on_invoice_id"
+    t.index ["placed_by_user_id"], name: "index_collection_holds_on_placed_by_user_id"
+    t.index ["released_by_user_id"], name: "index_collection_holds_on_released_by_user_id"
+    t.index ["source_message_id"], name: "index_collection_holds_on_source_message_id"
+    t.check_constraint "((`status` = _utf8mb4'active') and (`released_at` is null) and (`release_idempotency_key` is null)) or ((`status` = _utf8mb4'released') and (`released_at` is not null) and (`release_idempotency_key` is not null))", name: "collection_holds_release_state"
+    t.check_constraint "`reason` in (_utf8mb4'manual',_utf8mb4'dispute',_utf8mb4'other')", name: "collection_holds_reason"
+    t.check_constraint "`status` in (_utf8mb4'active',_utf8mb4'released')", name: "collection_holds_status"
+  end
+
+  create_table "conversation_action_revisions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.json "arguments", null: false
+    t.string "author_kind", null: false
+    t.bigint "author_user_id"
+    t.bigint "conversation_action_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_id"
+    t.string "idempotency_key", null: false
+    t.bigint "invoice_id"
+    t.json "proposed_reply", null: false
+    t.text "rationale"
+    t.integer "revision_number", null: false
+    t.datetime "updated_at", null: false
+    t.text "user_facing_summary", null: false
+    t.index ["author_user_id"], name: "index_conversation_action_revisions_on_author_user_id"
+    t.index ["conversation_action_id", "idempotency_key"], name: "index_action_revisions_on_action_and_idempotency", unique: true
+    t.index ["conversation_action_id", "revision_number"], name: "index_action_revisions_on_action_and_number", unique: true
+    t.index ["conversation_action_id"], name: "index_conversation_action_revisions_on_conversation_action_id"
+    t.index ["customer_id"], name: "index_conversation_action_revisions_on_customer_id"
+    t.index ["invoice_id"], name: "index_conversation_action_revisions_on_invoice_id"
+    t.check_constraint "`author_kind` in (_utf8mb4'user',_utf8mb4'system',_utf8mb4'ai')", name: "conversation_action_revisions_author_kind"
+    t.check_constraint "`revision_number` > 0", name: "conversation_action_revisions_number_positive"
+  end
+
+  create_table "conversation_actions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "action_type", null: false
+    t.bigint "conversation_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "created_by_user_id"
+    t.datetime "decided_at"
+    t.bigint "decided_by_user_id"
+    t.bigint "decided_revision_id"
+    t.string "decision_idempotency_key"
+    t.text "decision_note"
+    t.string "idempotency_key", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.string "origin_kind", null: false
+    t.bigint "source_message_id"
+    t.string "status", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "idempotency_key"], name: "index_conversation_actions_on_account_and_idempotency", unique: true
+    t.index ["account_id"], name: "index_conversation_actions_on_account_id"
+    t.index ["conversation_id", "status"], name: "index_conversation_actions_on_conversation_id_and_status"
+    t.index ["conversation_id"], name: "index_conversation_actions_on_conversation_id"
+    t.index ["created_by_user_id"], name: "index_conversation_actions_on_created_by_user_id"
+    t.index ["decided_by_user_id"], name: "index_conversation_actions_on_decided_by_user_id"
+    t.index ["decided_revision_id"], name: "index_conversation_actions_on_decided_revision_id"
+    t.index ["source_message_id"], name: "index_conversation_actions_on_source_message_id"
+    t.check_constraint "((`status` = _utf8mb4'pending_approval') and (`decided_at` is null) and (`decision_idempotency_key` is null)) or ((`status` in (_utf8mb4'approved',_utf8mb4'rejected')) and (`decided_at` is not null) and (`decision_idempotency_key` is not null))", name: "conversation_actions_decision_state"
+    t.check_constraint "`origin_kind` in (_utf8mb4'user',_utf8mb4'system',_utf8mb4'ai')", name: "conversation_actions_origin_kind"
+    t.check_constraint "`status` in (_utf8mb4'pending_approval',_utf8mb4'approved',_utf8mb4'rejected')", name: "conversation_actions_status"
+  end
+
+  create_table "conversation_escalations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "category", null: false
+    t.bigint "collection_hold_id"
+    t.bigint "conversation_action_id"
+    t.bigint "conversation_id", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_id"
+    t.text "details"
+    t.string "idempotency_key", null: false
+    t.bigint "invoice_id"
+    t.datetime "last_opened_at", null: false
+    t.integer "lock_version", default: 0, null: false
+    t.datetime "opened_at", null: false
+    t.string "opened_by_kind", null: false
+    t.bigint "opened_by_user_id"
+    t.string "priority", null: false
+    t.text "resolution_note"
+    t.datetime "resolved_at"
+    t.bigint "resolved_by_user_id"
+    t.bigint "source_message_id"
+    t.string "status", null: false
+    t.text "summary", null: false
+    t.string "transition_idempotency_key"
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "idempotency_key"], name: "index_escalations_on_account_and_idempotency", unique: true
+    t.index ["account_id"], name: "index_conversation_escalations_on_account_id"
+    t.index ["collection_hold_id"], name: "index_conversation_escalations_on_collection_hold_id"
+    t.index ["conversation_action_id"], name: "index_conversation_escalations_on_conversation_action_id"
+    t.index ["conversation_id", "status"], name: "index_conversation_escalations_on_conversation_id_and_status"
+    t.index ["conversation_id"], name: "index_conversation_escalations_on_conversation_id"
+    t.index ["customer_id"], name: "index_conversation_escalations_on_customer_id"
+    t.index ["invoice_id", "status"], name: "index_conversation_escalations_on_invoice_id_and_status"
+    t.index ["invoice_id"], name: "index_conversation_escalations_on_invoice_id"
+    t.index ["opened_by_user_id"], name: "index_conversation_escalations_on_opened_by_user_id"
+    t.index ["resolved_by_user_id"], name: "index_conversation_escalations_on_resolved_by_user_id"
+    t.index ["source_message_id"], name: "index_conversation_escalations_on_source_message_id"
+    t.check_constraint "((`status` = _utf8mb4'open') and (`resolved_at` is null) and (`resolution_note` is null)) or ((`status` = _utf8mb4'resolved') and (`resolved_at` is not null))", name: "conversation_escalations_resolution_state"
+    t.check_constraint "`category` in (_utf8mb4'dispute',_utf8mb4'low_confidence',_utf8mb4'ambiguous',_utf8mb4'delivery_failure',_utf8mb4'connection_failure',_utf8mb4'other')", name: "conversation_escalations_category"
+    t.check_constraint "`priority` in (_utf8mb4'normal',_utf8mb4'high',_utf8mb4'urgent')", name: "conversation_escalations_priority"
+    t.check_constraint "`status` in (_utf8mb4'open',_utf8mb4'resolved')", name: "conversation_escalations_status"
   end
 
   create_table "conversation_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -67,9 +203,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.string "internet_message_id_digest", limit: 64, collation: "utf8mb4_0900_bin"
     t.bigint "invoice_id"
     t.string "kind", null: false
+    t.virtual "manual_reminder_delivery_job_id", type: :string, collation: "utf8mb4_0900_bin", as: "if((`kind` = _utf8mb4'manual_reminder'),`delivery_job_id`,NULL)", stored: true
     t.string "matching_method", default: "none", null: false
     t.string "matching_status", default: "matched", null: false
     t.string "provider_account_id", collation: "utf8mb4_0900_bin"
+    t.datetime "provider_delivery_started_at"
     t.string "provider_message_id", collation: "utf8mb4_0900_bin"
     t.json "provider_metadata", null: false
     t.string "provider_thread_id", collation: "utf8mb4_0900_bin"
@@ -102,9 +240,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.index ["email_connection_id"], name: "index_conversation_messages_on_email_connection_id"
     t.index ["invoice_id", "direction", "status", "sent_at"], name: "index_conversation_messages_on_outbound_delivery"
     t.index ["invoice_id"], name: "index_conversation_messages_on_invoice_id"
+    t.index ["manual_reminder_delivery_job_id"], name: "index_manual_reminders_on_delivery_job_id", unique: true
     t.index ["reply_to_message_id"], name: "index_conversation_messages_on_reply_to_message_id"
     t.index ["reviewed_by_user_id"], name: "index_conversation_messages_on_reviewed_by_user_id"
     t.index ["status", "delivery_attempted_at"], name: "index_conversation_messages_on_pending_delivery_age"
+    t.index ["status", "provider_delivery_started_at"], name: "index_conversation_messages_on_provider_delivery_claim"
   end
 
   create_table "conversations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -200,6 +340,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.text "last_error"
     t.json "metadata", null: false
     t.datetime "next_retry_at"
+    t.datetime "post_processing_enqueued_at"
+    t.string "post_processing_enqueued_job_id", collation: "utf8mb4_0900_bin"
+    t.datetime "post_processing_finalized_at"
+    t.string "post_processing_job_id", collation: "utf8mb4_0900_bin"
+    t.datetime "post_processing_started_at"
     t.datetime "processed_at"
     t.datetime "processing_enqueued_at"
     t.string "processing_enqueued_job_id", collation: "utf8mb4_0900_bin"
@@ -215,6 +360,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.index ["conversation_message_id"], name: "index_email_message_receipts_on_conversation_message_id"
     t.index ["email_connection_id", "provider_account_id", "provider_message_id"], name: "index_email_receipts_on_connection_message", unique: true
     t.index ["status", "next_retry_at", "id"], name: "index_email_receipts_for_retry"
+    t.index ["status", "post_processing_finalized_at"], name: "index_email_receipts_on_post_processing"
     t.index ["status", "processing_started_at"], name: "index_email_receipts_for_stale_processing"
   end
 
@@ -235,6 +381,46 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.string "email_address", null: false
     t.datetime "updated_at", null: false
     t.index ["email_address"], name: "index_identities_on_email_address", unique: true
+  end
+
+  create_table "invoice_reminder_notification_deliveries", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "attempt_token", collation: "utf8mb4_0900_bin"
+    t.integer "attempts", default: 0, null: false
+    t.integer "build_attempts", default: 0, null: false
+    t.datetime "build_started_at"
+    t.string "build_token", collation: "utf8mb4_0900_bin"
+    t.datetime "canceled_at"
+    t.datetime "created_at", null: false
+    t.datetime "delivered_at"
+    t.datetime "delivery_started_at"
+    t.string "event_name", null: false
+    t.datetime "failed_at"
+    t.bigint "invoice_reminder_id", null: false
+    t.string "last_error_class"
+    t.text "last_error_message"
+    t.datetime "next_retry_at"
+    t.string "recipient_email", null: false
+    t.bigint "recipient_user_id"
+    t.bigint "recipient_user_snapshot_id", null: false
+    t.datetime "retry_enqueued_at"
+    t.string "retry_job_id", collation: "utf8mb4_0900_bin"
+    t.integer "scheduling_failures", default: 0, null: false
+    t.string "status", default: "pending", null: false
+    t.string "terminal_reason"
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_invoice_reminder_notification_deliveries_on_account_id"
+    t.index ["invoice_reminder_id", "recipient_user_snapshot_id", "event_name"], name: "index_reminder_notification_deliveries_on_recipient", unique: true
+    t.index ["invoice_reminder_id"], name: "idx_on_invoice_reminder_id_b333dcf0cd"
+    t.index ["recipient_user_id"], name: "idx_on_recipient_user_id_5e68a810d1"
+    t.index ["status", "build_started_at", "build_token"], name: "index_reminder_notification_deliveries_on_stale_build"
+    t.index ["status", "delivery_started_at"], name: "index_reminder_notification_deliveries_on_status"
+    t.index ["status", "retry_enqueued_at", "retry_job_id"], name: "index_reminder_notification_deliveries_on_stale_retry"
+    t.index ["status", "retry_job_id", "next_retry_at"], name: "index_reminder_notification_deliveries_on_due_retry"
+    t.check_constraint "(`attempts` >= 0) and (`attempts` <= 5)", name: "invoice_reminder_notification_deliveries_attempts"
+    t.check_constraint "(`build_attempts` >= 0) and (`build_attempts` <= 5)", name: "invoice_reminder_notification_deliveries_build_attempts"
+    t.check_constraint "`scheduling_failures` >= 0", name: "invoice_reminder_notification_deliveries_scheduling_failures"
+    t.check_constraint "`status` in (_utf8mb4'pending',_utf8mb4'delivering',_utf8mb4'delivered',_utf8mb4'uncertain',_utf8mb4'failed',_utf8mb4'canceled')", name: "invoice_reminder_notification_deliveries_status"
   end
 
   create_table "invoice_reminder_suppressions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -264,7 +450,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.integer "day_offset", null: false
     t.bigint "invoice_id", null: false
     t.bigint "invoice_schedule_id"
+    t.datetime "notifications_finalized_at"
+    t.datetime "notifications_initialized_at"
     t.string "stage_key", null: false
+    t.boolean "terminal_at_delivery"
     t.string "tone"
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_invoice_reminders_on_account_id"
@@ -273,6 +462,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.index ["invoice_id", "stage_key"], name: "index_invoice_reminders_on_invoice_id_and_stage_key", unique: true
     t.index ["invoice_id"], name: "index_invoice_reminders_on_invoice_id"
     t.index ["invoice_schedule_id"], name: "index_invoice_reminders_on_invoice_schedule_id"
+    t.index ["notifications_finalized_at", "notifications_initialized_at"], name: "index_invoice_reminders_on_notification_state"
   end
 
   create_table "invoice_schedules", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -465,6 +655,33 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
     t.index ["identity_id"], name: "index_users_on_identity_id"
   end
 
+  add_foreign_key "collection_holds", "accounts"
+  add_foreign_key "collection_holds", "conversation_actions", on_delete: :nullify
+  add_foreign_key "collection_holds", "conversation_messages", column: "source_message_id", on_delete: :nullify
+  add_foreign_key "collection_holds", "conversations"
+  add_foreign_key "collection_holds", "customers"
+  add_foreign_key "collection_holds", "invoices"
+  add_foreign_key "collection_holds", "users", column: "placed_by_user_id"
+  add_foreign_key "collection_holds", "users", column: "released_by_user_id"
+  add_foreign_key "conversation_action_revisions", "conversation_actions"
+  add_foreign_key "conversation_action_revisions", "customers"
+  add_foreign_key "conversation_action_revisions", "invoices"
+  add_foreign_key "conversation_action_revisions", "users", column: "author_user_id"
+  add_foreign_key "conversation_actions", "accounts"
+  add_foreign_key "conversation_actions", "conversation_action_revisions", column: "decided_revision_id", on_delete: :nullify
+  add_foreign_key "conversation_actions", "conversation_messages", column: "source_message_id", on_delete: :nullify
+  add_foreign_key "conversation_actions", "conversations"
+  add_foreign_key "conversation_actions", "users", column: "created_by_user_id"
+  add_foreign_key "conversation_actions", "users", column: "decided_by_user_id"
+  add_foreign_key "conversation_escalations", "accounts"
+  add_foreign_key "conversation_escalations", "collection_holds", on_delete: :nullify
+  add_foreign_key "conversation_escalations", "conversation_actions", on_delete: :nullify
+  add_foreign_key "conversation_escalations", "conversation_messages", column: "source_message_id", on_delete: :nullify
+  add_foreign_key "conversation_escalations", "conversations"
+  add_foreign_key "conversation_escalations", "customers"
+  add_foreign_key "conversation_escalations", "invoices"
+  add_foreign_key "conversation_escalations", "users", column: "opened_by_user_id"
+  add_foreign_key "conversation_escalations", "users", column: "resolved_by_user_id"
   add_foreign_key "conversation_events", "accounts"
   add_foreign_key "conversation_events", "conversation_messages", on_delete: :nullify
   add_foreign_key "conversation_events", "conversations"
@@ -490,6 +707,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
   add_foreign_key "email_message_receipts", "conversation_messages", on_delete: :nullify
   add_foreign_key "email_message_receipts", "email_connections"
   add_foreign_key "external_identities", "identities", on_delete: :cascade
+  add_foreign_key "invoice_reminder_notification_deliveries", "accounts"
+  add_foreign_key "invoice_reminder_notification_deliveries", "invoice_reminders"
+  add_foreign_key "invoice_reminder_notification_deliveries", "users", column: "recipient_user_id", on_delete: :nullify
   add_foreign_key "invoice_reminder_suppressions", "accounts"
   add_foreign_key "invoice_reminder_suppressions", "invoice_schedules", on_delete: :nullify
   add_foreign_key "invoice_reminder_suppressions", "invoices"

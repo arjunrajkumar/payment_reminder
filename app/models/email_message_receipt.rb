@@ -2,6 +2,7 @@ class EmailMessageReceipt < ApplicationRecord
   class ClaimLost < StandardError; end
 
   ENQUEUE_RESERVATION_STALE_AFTER = 1.hour
+  POST_PROCESSING_STALE_AFTER = 1.hour
 
   DIRECTIONS = {
     inbound: "inbound",
@@ -34,6 +35,8 @@ class EmailMessageReceipt < ApplicationRecord
     :provider_account_id,
     :processing_job_id,
     :processing_enqueued_job_id,
+    :post_processing_job_id,
+    :post_processing_enqueued_job_id,
     with: ->(id) { id.to_s.strip.presence }
 
   validates :provider_account_id, presence: true
@@ -56,6 +59,9 @@ class EmailMessageReceipt < ApplicationRecord
       .or(where(status: :failed, next_retry_at: ..at))
   end
   scope :stale_processing, ->(before:) { status_processing.where(processing_started_at: ...before) }
+  scope :unfinished_post_processing, -> {
+    status_processed.where(post_processing_finalized_at: nil)
+  }
 
   def self.processing_concurrency_key(id)
     identity = where(id:).pick(
@@ -207,6 +213,142 @@ class EmailMessageReceipt < ApplicationRecord
         last_error: nil
       )
     end
+  end
+
+  def mark_post_processing_finalized!(at: Time.current)
+    return true if post_processing_finalized_at?
+
+    updated = self.class.where(
+      id:,
+      status: :processed,
+      post_processing_finalized_at: nil
+    ).update_all(
+      post_processing_finalized_at: at,
+      post_processing_job_id: nil,
+      post_processing_started_at: nil,
+      post_processing_enqueued_job_id: nil,
+      post_processing_enqueued_at: nil
+    )
+    reload
+    updated == 1 || post_processing_finalized_at?
+  end
+
+  def reserve_post_processing_enqueue!(job_id:, at: Time.current)
+    reserved = false
+    normalized_job_id = job_id.to_s.strip.presence
+    return false unless normalized_job_id
+
+    with_lock do
+      next unless status_processed? && post_processing_finalized_at.nil?
+      next if post_processing_claim_active?(at:)
+      next if post_processing_enqueue_reserved?(at:)
+
+      update_columns(
+        post_processing_job_id: nil,
+        post_processing_started_at: nil,
+        post_processing_enqueued_job_id: normalized_job_id,
+        post_processing_enqueued_at: at,
+        updated_at: at
+      )
+      reload
+      reserved = true
+    end
+    reserved
+  end
+
+  def claim_post_processing!(job_id:, at: Time.current)
+    claimed = false
+    normalized_job_id = job_id.to_s.strip.presence
+    return false unless normalized_job_id
+
+    with_lock do
+      next unless status_processed? && post_processing_finalized_at.nil?
+      next if post_processing_job_id.present?
+      next if post_processing_enqueued_job_id.present? &&
+        post_processing_enqueued_job_id != normalized_job_id
+
+      update_columns(
+        post_processing_job_id: normalized_job_id,
+        post_processing_started_at: at,
+        post_processing_enqueued_job_id: nil,
+        post_processing_enqueued_at: nil,
+        updated_at: at
+      )
+      reload
+      claimed = true
+    end
+    claimed
+  end
+
+  def complete_post_processing!(job_id:, at: Time.current)
+    completed = false
+    normalized_job_id = job_id.to_s.strip.presence
+    return false unless normalized_job_id
+
+    with_lock do
+      next unless post_processing_job_id == normalized_job_id
+      next unless status_processed? && post_processing_finalized_at.nil?
+
+      update_columns(
+        post_processing_finalized_at: at,
+        post_processing_job_id: nil,
+        post_processing_started_at: nil,
+        post_processing_enqueued_job_id: nil,
+        post_processing_enqueued_at: nil,
+        updated_at: at
+      )
+      reload
+      completed = true
+    end
+    completed
+  end
+
+  def reserve_post_processing_retry!(job_id:, at: Time.current)
+    reserved = false
+    normalized_job_id = job_id.to_s.strip.presence
+    return false unless normalized_job_id
+
+    with_lock do
+      next unless status_processed? && post_processing_finalized_at.nil?
+      next unless post_processing_job_id == normalized_job_id
+
+      update_columns(
+        post_processing_job_id: nil,
+        post_processing_started_at: nil,
+        post_processing_enqueued_job_id: normalized_job_id,
+        post_processing_enqueued_at: at,
+        updated_at: at
+      )
+      reload
+      reserved = true
+    end
+    reserved
+  end
+
+  def release_post_processing_ownership!(job_id:)
+    released = false
+    normalized_job_id = job_id.to_s.strip.presence
+    return false unless normalized_job_id
+
+    with_lock do
+      owns_claim = post_processing_job_id == normalized_job_id
+      owns_enqueue = post_processing_enqueued_job_id == normalized_job_id
+      next unless owns_claim || owns_enqueue
+
+      update_columns(
+        post_processing_job_id: owns_claim ? nil : post_processing_job_id,
+        post_processing_started_at:
+          owns_claim ? nil : post_processing_started_at,
+        post_processing_enqueued_job_id:
+          owns_enqueue ? nil : post_processing_enqueued_job_id,
+        post_processing_enqueued_at:
+          owns_enqueue ? nil : post_processing_enqueued_at,
+        updated_at: Time.current
+      )
+      reload
+      released = true
+    end
+    released
   end
 
   def ignore!(job_id:, reason:, direction: nil, provider_thread_id: nil, metadata: {})
@@ -457,6 +599,18 @@ class EmailMessageReceipt < ApplicationRecord
       processing_enqueued_job_id.present? &&
         processing_enqueued_at.present? &&
         processing_enqueued_at >= ENQUEUE_RESERVATION_STALE_AFTER.ago(at)
+    end
+
+    def post_processing_claim_active?(at:)
+      post_processing_job_id.present? &&
+        post_processing_started_at.present? &&
+        post_processing_started_at >= POST_PROCESSING_STALE_AFTER.ago(at)
+    end
+
+    def post_processing_enqueue_reserved?(at:)
+      post_processing_enqueued_job_id.present? &&
+        post_processing_enqueued_at.present? &&
+        post_processing_enqueued_at >= POST_PROCESSING_STALE_AFTER.ago(at)
     end
 
     def stale_mailbox_reason

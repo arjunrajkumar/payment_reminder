@@ -28,6 +28,24 @@ class InvoiceReminders::SendJob < ApplicationJob
     invoice = find_invoice(invoice_id:, stage_key:)
     return unless invoice
 
+    if delivered_reminder = invoice.invoice_reminders
+        .includes(:conversation_message)
+        .find_by(stage_key:)
+      if delivered_reminder.status_sent?
+        InvoiceReminders::DeliveryLog.skipped(
+          invoice:,
+          stage_key:,
+          reason: "duplicate_stage"
+        )
+        notify_account_users(
+          invoice:,
+          reminder: delivered_reminder,
+          terminal: delivered_reminder.terminal_stage?
+        )
+        return
+      end
+    end
+
     decision = InvoiceReminders::DeliveryPreflight.call(
       invoice:,
       category:,
@@ -77,7 +95,22 @@ class InvoiceReminders::SendJob < ApplicationJob
     def deliver_reminder(invoice:, reservation:)
       stage = reservation.stage
       reminder = reservation.reminder
-      terminal = stage.category_overdue? && stage.terminal?
+      terminal = reminder.terminal_stage?
+      claim = InvoiceReminders::FinalDeliveryClaim.call(
+        invoice:,
+        reminder:,
+        delivery_job_id: job_id
+      )
+      unless claim.claimed?
+        InvoiceReminders::DeliveryLog.skipped(
+          invoice:,
+          stage_key: stage.key,
+          reason: claim.reason,
+          context: claim.context
+        )
+        return
+      end
+
       delivery_result = deliver_email(
         invoice:,
         connection: reservation.connection,
@@ -117,13 +150,18 @@ class InvoiceReminders::SendJob < ApplicationJob
       else
         reminder.conversation_message.mark_delivery_failed!(
           job_id:,
-          failure_reason: delivery_result.failure_reason
+          failure_reason: delivery_result.failure_reason,
+          delivery_uncertain: delivery_result.delivery_uncertain
         )
       end
     end
 
     def notify_account_users(invoice:, reminder:, terminal:)
-      InvoiceReminders::Notifier.deliver(invoice:, reminder:, terminal:)
+      InvoiceReminders::Notifier.deliver_once(
+        invoice:,
+        reminder:,
+        terminal:
+      )
     end
 
     def deliver_email(invoice:, connection:, mail_message:, message:)

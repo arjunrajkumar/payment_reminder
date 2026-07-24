@@ -44,6 +44,7 @@ class ConversationMessages::ManualReplyJob < ApplicationJob
       mail_message:,
       attempted_at: Time.current
     )
+    return unless message.claim_provider_delivery!(job_id:)
 
     result = ConversationMessages::ProviderDelivery.call(
       account:,
@@ -100,7 +101,8 @@ class ConversationMessages::ManualReplyJob < ApplicationJob
     def record_failure(message, reason)
       recorded = message.mark_delivery_failed!(
         job_id:,
-        failure_reason: reason
+        failure_reason: reason,
+        delivery_uncertain: message.provider_delivery_claimed?
       )
       return unless recorded || message.reload.status_failed?
 

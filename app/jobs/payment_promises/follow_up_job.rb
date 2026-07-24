@@ -28,7 +28,11 @@ class PaymentPromises::FollowUpJob < ApplicationJob
     return unless payment_promise
 
     decision = PaymentPromises::FollowUpDecision.before_refresh(payment_promise:)
-    return unless proceed_after_preflight?(decision)
+    unless proceed_after_preflight?(decision)
+      pause_owned_delivery(payment_promise) if
+        decision.reason == "active_collection_hold"
+      return
+    end
 
     InvoiceReminders::InvoiceFreshnessCheck.call(decision.invoice)
     reservation = PaymentPromises::DeliveryReservation.call(
@@ -77,6 +81,20 @@ class PaymentPromises::FollowUpJob < ApplicationJob
     end
 
     def deliver_follow_up(payment_promise:, reservation:)
+      claim = PaymentPromises::FinalDeliveryClaim.call(
+        payment_promise:,
+        message: reservation.message,
+        delivery_job_id: job_id
+      )
+      unless claim.claimed?
+        PaymentPromises::FollowUpLog.skipped(
+          payment_promise:,
+          reason: claim.reason,
+          context: claim.context
+        )
+        return
+      end
+
       delivery_result = ConversationMessages::ProviderDelivery.call(
         account: payment_promise.account,
         connection: reservation.connection,
@@ -122,7 +140,8 @@ class PaymentPromises::FollowUpJob < ApplicationJob
       else
         payment_promise.record_follow_up_failed!(
           job_id:,
-          failure_reason: delivery_result.failure_reason
+          failure_reason: delivery_result.failure_reason,
+          delivery_uncertain: delivery_result.delivery_uncertain
         )
       end
     end
@@ -140,5 +159,12 @@ class PaymentPromises::FollowUpJob < ApplicationJob
         delivered: false
       )
       true
+    end
+
+    def pause_owned_delivery(payment_promise)
+      PaymentPromises::HoldPause.call(
+        payment_promise:,
+        delivery_job_id: job_id
+      )
     end
 end

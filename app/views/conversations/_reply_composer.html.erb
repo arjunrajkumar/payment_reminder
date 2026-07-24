@@ -2,6 +2,12 @@
 <section class="app-card app-reply-composer" aria-label="Reply">
   <h2 class="app-card__title">Reply</h2>
 
+  <% if collection_held %>
+    <p class="app-status-banner app-status-banner--paused">
+      Automated collection is paused. You can still send a careful human reply.
+    </p>
+  <% end %>
+
   <% if anchor.nil? %>
     <p class="app-card__description">A safe customer email is required before you can reply.</p>
   <% elsif health.sending.state != "healthy" %>

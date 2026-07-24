@@ -1,7 +1,8 @@
 class InvoiceReminderSuppression < ApplicationRecord
   REASONS = {
     recent_outbound_message: "recent_outbound_message",
-    active_payment_promise: "active_payment_promise"
+    active_payment_promise: "active_payment_promise",
+    active_collection_hold: "active_collection_hold"
   }.freeze
 
   belongs_to :account, inverse_of: :invoice_reminder_suppressions

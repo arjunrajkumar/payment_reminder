@@ -49,4 +49,64 @@ class InvoiceReminders::ManualSendJobTest < ActiveJob::TestCase
     assert_predicate message, :status_failed?
     assert_equal "invalid recipient", message.failure_reason
   end
+
+  test "claims provider delivery and preserves ambiguous uncertainty" do
+    EmailConnection::Delivery.any_instance.expects(:deliver)
+      .raises(EmailConnection::Errors::AmbiguousDeliveryError, "response lost")
+
+    InvoiceReminders::ManualSendJob.perform_now(@invoice.id)
+
+    message = @invoice.conversation_messages.order(:id).last
+    assert_predicate message, :kind_manual_reminder?
+    assert_predicate message, :provider_delivery_claimed?
+    assert_predicate message, :status_failed?
+    assert_predicate message, :delivery_uncertain?
+    assert_equal "response lost", message.failure_reason
+  end
+
+  test "same job re-entry after sent does not call the provider twice" do
+    result = EmailConnection::Delivery::Result.new(
+      provider_message_id: "manual-reentry-sent",
+      provider_thread_id: "manual-reentry-thread"
+    )
+    EmailConnection::Delivery.any_instance.expects(:deliver).once.returns(result)
+    job = InvoiceReminders::ManualSendJob.new(@invoice.id)
+
+    2.times { job.perform_now }
+
+    messages = @invoice.conversation_messages
+      .kind_manual_reminder
+      .where(delivery_job_id: job.job_id)
+    assert_equal 1, messages.count
+    assert_predicate messages.sole, :status_sent?
+  end
+
+  test "same job re-entry after uncertain failure does not call the provider twice" do
+    EmailConnection::Delivery.any_instance.expects(:deliver).once
+      .raises(EmailConnection::Errors::AmbiguousDeliveryError, "response lost")
+    job = InvoiceReminders::ManualSendJob.new(@invoice.id)
+
+    2.times { job.perform_now }
+
+    messages = @invoice.conversation_messages
+      .kind_manual_reminder
+      .where(delivery_job_id: job.job_id)
+    assert_equal 1, messages.count
+    assert_predicate messages.sole, :delivery_uncertain?
+  end
+
+  test "same job re-entry after definite failure does not call the provider twice" do
+    EmailConnection::Delivery.any_instance.expects(:deliver).once
+      .raises(EmailConnection::Errors::PermanentDeliveryError, "rejected")
+    job = InvoiceReminders::ManualSendJob.new(@invoice.id)
+
+    2.times { job.perform_now }
+
+    messages = @invoice.conversation_messages
+      .kind_manual_reminder
+      .where(delivery_job_id: job.job_id)
+    assert_equal 1, messages.count
+    assert_predicate messages.sole, :status_failed?
+    assert_not_predicate messages.sole, :delivery_uncertain?
+  end
 end

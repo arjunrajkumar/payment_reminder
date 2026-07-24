@@ -206,6 +206,20 @@ class AccountTest < ActiveSupport::TestCase
       stage_key: "pre_due_7",
       day_offset: 7
     )
+    recipient = account.users.create!(
+      name: "Notification lifecycle",
+      identity: Identity.create!(
+        email_address: "notification-lifecycle@example.com"
+      ),
+      verified_at: Time.current
+    )
+    notification = reminder.notification_deliveries.create!(
+      account:,
+      recipient_user: recipient,
+      recipient_user_snapshot_id: recipient.id,
+      recipient_email: recipient.identity.email_address,
+      event_name: InvoiceReminders::Notifier::EVENTS.fetch(:reminder)
+    )
     source_message = invoice.conversation_messages.create!(
       account:,
       conversation:,
@@ -229,6 +243,7 @@ class AccountTest < ActiveSupport::TestCase
     assert_not ConversationEvent.where(id: event_ids).exists?
     assert_not ConversationMessage.where(id: [ reminder_message.id, source_message.id ]).exists?
     assert_not InvoiceReminder.exists?(reminder.id)
+    assert_not InvoiceReminderNotificationDelivery.exists?(notification.id)
     assert_not PaymentPromise.exists?(payment_promise.id)
   end
 

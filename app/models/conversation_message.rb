@@ -100,6 +100,18 @@ class ConversationMessage < ApplicationRecord
   has_many :conversation_events,
     dependent: :nullify,
     inverse_of: :conversation_message
+  has_many :conversation_actions,
+    foreign_key: :source_message_id,
+    dependent: :nullify,
+    inverse_of: :source_message
+  has_many :collection_holds,
+    foreign_key: :source_message_id,
+    dependent: :nullify,
+    inverse_of: :source_message
+  has_many :conversation_escalations,
+    foreign_key: :source_message_id,
+    dependent: :nullify,
+    inverse_of: :source_message
 
   attribute :review_outcome, :string
 
@@ -160,11 +172,21 @@ class ConversationMessage < ApplicationRecord
   validate :review_outcome_matches_completion
   validate :delivery_uncertainty_matches_status
 
-  scope :successful_outbound, -> { direction_outbound.status_sent }
+  scope :successful_outbound, -> do
+    direction_outbound.where(status: :sent).or(
+      direction_outbound.where(delivery_uncertain: true)
+    )
+  end
   scope :awaiting_review, -> do
     where.not(email_connection_id: nil).where(review_required: true, reviewed_at: nil)
   end
-  scope :sent_after, ->(time) { where(arel_table[:sent_at].gt(time)) }
+  scope :sent_after, ->(time) do
+    where(
+      "COALESCE(conversation_messages.sent_at, " \
+        "conversation_messages.provider_delivery_started_at) > ?",
+      time
+    )
+  end
   scope :chronological, -> do
     order(
       Arel.sql("COALESCE(received_at, sent_at, created_at) ASC"),
@@ -199,6 +221,55 @@ class ConversationMessage < ApplicationRecord
     normalized_job_id = job_id.to_s.strip.presence
 
     status_pending? && normalized_job_id.present? && delivery_job_id == normalized_job_id
+  end
+
+  def provider_delivery_claimed?
+    provider_delivery_started_at.present?
+  end
+
+  def claim_provider_delivery!(job_id:, started_at: Time.current)
+    claimed = false
+    with_lock do
+      next unless delivery_owned_by?(job_id)
+      next if provider_delivery_claimed?
+
+      update!(provider_delivery_started_at: started_at)
+      claimed = true
+    end
+    claimed
+  end
+
+  def relinquish_provider_delivery_claim!(
+    job_id:,
+    connection: nil,
+    provider_account_id: nil,
+    credential_generation: nil
+  )
+    released = false
+    operation = lambda do
+      with_lock do
+        next unless delivery_owned_by?(job_id)
+        next unless provider_delivery_claimed?
+        next if provider_message_id.present?
+
+        attributes = { provider_delivery_started_at: nil }
+        if connection
+          next unless email_connection_id == connection.id
+          next unless self.provider_account_id == provider_account_id.to_s.strip
+          next unless email_connection_generation == credential_generation.to_i
+
+          attributes.merge!(
+            email_connection: nil,
+            email_connection_generation: nil,
+            provider_account_id: nil
+          )
+        end
+        with_delivery_mailbox_binding_change { update!(attributes) }
+        released = true
+      end
+    end
+    invoice ? invoice.with_lock(&operation) : operation.call
+    released
   end
 
   def refresh_delivery_attempt!(job_id:, mail_message:, attempted_at: Time.current)
@@ -304,7 +375,10 @@ class ConversationMessage < ApplicationRecord
     with_lock do
       next unless stale_pending_delivery?(before:)
 
-      fail_delivery!(failure_reason:, delivery_uncertain:)
+      fail_delivery!(
+        failure_reason:,
+        delivery_uncertain: delivery_uncertain || provider_delivery_claimed?
+      )
       payment_promise_follow_up&.follow_up_failed!
       reconciled = true
     end
@@ -364,12 +438,27 @@ class ConversationMessage < ApplicationRecord
     parsed_message:,
     provider_account_id:
   )
+    return false unless kind_manual_reply?
+
+    reconcile_imported_app_delivery!(
+      receipt:,
+      parsed_message:,
+      provider_account_id:
+    )
+  end
+
+  def reconcile_imported_app_delivery!(
+    receipt:,
+    parsed_message:,
+    provider_account_id:
+  )
     reconciled = false
     with_lock do
-      next unless kind_manual_reply? && direction_outbound?
-      next unless requested_provider_account_id == provider_account_id.to_s.strip
+      next unless direction_outbound? && app_created_delivery_kind?
+      next unless delivery_provider_account_id == provider_account_id.to_s.strip
       next unless internet_message_id == parsed_message.internet_message_id
 
+      previously_uncertain = delivery_uncertain? || provider_delivery_claimed?
       with_delivery_mailbox_binding_change do
         update!(
           email_connection: receipt.email_connection,
@@ -383,6 +472,17 @@ class ConversationMessage < ApplicationRecord
           delivery_uncertain: false
         )
       end
+      ConversationEvent.record_once!(
+        conversation:,
+        conversation_message: self,
+        kind: :conversation_message_imported,
+        actor_kind: :system,
+        metadata: {
+          "reconciled_app_delivery" => true,
+          "delivery_kind" => kind,
+          "previously_uncertain" => previously_uncertain
+        }
+      ) unless kind_manual_reply?
       reconciled = true
     end
     reconciled
@@ -400,6 +500,25 @@ class ConversationMessage < ApplicationRecord
       end
 
       updated
+    end
+
+    def app_created_delivery_kind?
+      kind.in?(
+        %w[
+          manual_reply
+          manual_reminder
+          scheduled_reminder
+          promise_follow_up
+        ]
+      )
+    end
+
+    def delivery_provider_account_id
+      if kind_manual_reply?
+        requested_provider_account_id
+      else
+        provider_account_id
+      end
     end
 
     def stale_pending_delivery?(before:)

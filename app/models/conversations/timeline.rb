@@ -22,7 +22,7 @@ class Conversations::Timeline
     @events ||= conversation.account.conversation_events
       .where(
         conversation_id: Conversations::ReviewWorkUnit
-          .conversation_ids_for(conversation:)
+          .workflow_conversation_ids_for(conversation:)
       )
       .where.not(kind: HIDDEN_EVENT_KINDS)
       .chronological

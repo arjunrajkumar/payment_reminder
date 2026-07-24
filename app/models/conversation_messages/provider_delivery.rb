@@ -73,11 +73,12 @@ class ConversationMessages::ProviderDelivery
   def call
     confirmed_result(deliver)
   rescue EmailConnection::Errors::CredentialChanged
-    release_obsolete_mailbox_binding
+    release_retry_safe_claim(release_mailbox_binding: true)
     raise EmailConnection::Errors::TemporaryDeliveryError,
       "Email connection changed before delivery; retrying.",
       cause: nil
   rescue EmailConnection::Errors::TemporaryDeliveryError
+    release_retry_safe_claim
     raise
   rescue EmailConnection::Errors::AmbiguousDeliveryError => error
     unconfirmed_result(error.message)
@@ -165,13 +166,30 @@ class ConversationMessages::ProviderDelivery
       value.to_s.strip.presence
     end
 
-    def release_obsolete_mailbox_binding
-      conversation_message&.release_delivery_mailbox_binding!(
-        connection:,
-        job_id: delivery_job_id,
-        provider_account_id:,
-        credential_generation:
-      )
+    def release_retry_safe_claim(release_mailbox_binding: false)
+      return unless conversation_message
+
+      unless conversation_message.provider_delivery_claimed?
+        if release_mailbox_binding
+          conversation_message.release_delivery_mailbox_binding!(
+            connection:,
+            job_id: delivery_job_id,
+            provider_account_id:,
+            credential_generation:
+          )
+        end
+        return
+      end
+
+      attributes = { job_id: delivery_job_id }
+      if release_mailbox_binding
+        attributes.merge!(
+          connection:,
+          provider_account_id:,
+          credential_generation:
+        )
+      end
+      conversation_message.relinquish_provider_delivery_claim!(**attributes)
     end
 
     def report_authentication_failure(error)

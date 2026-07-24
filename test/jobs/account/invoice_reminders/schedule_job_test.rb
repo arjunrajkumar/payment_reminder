@@ -290,6 +290,57 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     end
   end
 
+  test "an active collection hold records one stage suppression and queues no job" do
+    reminder_on = Date.new(2026, 11, 17)
+    invoice = nil
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoice = create_invoice(customer:, due_on: reminder_on + 3.days)
+      hold = CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice:),
+        reason: :dispute,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "scheduler-collection-hold"
+      )
+
+      2.times do
+        assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+          Account::InvoiceReminders::ScheduleJob.perform_now
+        end
+      end
+
+      assert_equal 1, invoice.invoice_reminder_suppressions.count
+      suppression = invoice.invoice_reminder_suppressions.find_by!(
+        stage_key: "pre_due_3"
+      )
+      assert_predicate suppression, :reason_active_collection_hold?
+
+      release_key = "release-scheduler-collection-hold"
+      hold.release!(
+        actor_user: users(:arjun),
+        idempotency_key: release_key,
+        snapshot_token: CollectionHolds::HoldSnapshot.token_for(
+          hold:,
+          idempotency_key: release_key
+        )
+      )
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+
+    travel_to (reminder_on + 6.days).in_time_zone.change(hour: 12) do
+      assert_enqueued_with(
+        job: InvoiceReminders::SendJob,
+        args: [ invoice.id, "overdue", 3, "neutral" ]
+      ) do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
   test "queues an invoice whose last successful message was exactly 48 hours ago" do
     reminder_on = Date.new(2026, 11, 17)
 

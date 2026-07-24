@@ -99,7 +99,9 @@ class InvoiceReminders::StageDecisionTest < ActiveSupport::TestCase
   end
 
   test "checks the due date and customer recipient" do
-    assert_equal "stage_not_due", decide.reason
+    travel_to Time.zone.local(2026, 7, 23, 12) do
+      assert_equal "stage_not_due", decide.reason
+    end
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       @invoice.customer.update!(email: nil)
@@ -129,6 +131,21 @@ class InvoiceReminders::StageDecisionTest < ActiveSupport::TestCase
 
       assert_predicate decision, :suppression?
       assert_equal "recent_outbound_message", decision.reason
+    end
+  end
+
+  test "returns active collection hold as a durable suppression with safe context" do
+    hold = place_hold
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      @invoice.customer.update!(email: nil)
+      decision = decide
+
+      assert_predicate decision, :suppression?
+      assert_equal "active_collection_hold", decision.reason
+      assert_equal [ hold.id ], decision.context.fetch(:collection_hold_ids)
+      assert_equal [ "dispute" ], decision.context.fetch(:collection_hold_reasons)
+      refute_includes decision.context.values, hold.note
     end
   end
 
@@ -195,6 +212,17 @@ class InvoiceReminders::StageDecisionTest < ActiveSupport::TestCase
         invoice: @invoice,
         source_message:,
         promised_on: Date.current + 2.days
+      )
+    end
+
+    def place_hold
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :dispute,
+        note: "Private dispute detail",
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "stage-decision-hold"
       )
     end
 end

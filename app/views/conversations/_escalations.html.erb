@@ -1,0 +1,83 @@
+<section class="app-card app-conversation-panel" aria-label="Escalations">
+  <h2 class="app-card__title">Escalations</h2>
+
+  <% escalations.each do |escalation| %>
+    <article class="app-work-item app-escalation">
+      <header class="app-work-item__header">
+        <strong><%= escalation.summary %></strong>
+        <span class="app-inbox-chip"><%= escalation.priority.humanize %></span>
+        <span class="app-inbox-chip"><%= escalation.status.humanize %></span>
+      </header>
+      <p><%= escalation.category.humanize %></p>
+      <% if escalation.details.present? %><p><%= escalation.details %></p><% end %>
+      <p class="app-card__description">
+        Opened by <%= escalation.opened_by_user&.name || escalation.opened_by_kind.humanize %>
+        at <%= l(escalation.opened_at, format: :short) %>.
+      </p>
+
+      <% if escalation.status_open? %>
+        <% resolution_key = SecureRandom.uuid %>
+        <%= form_with url: conversation_escalation_resolution_path(
+          conversation,
+          escalation
+        ), scope: :resolution, class: "app-inline-form" do |form| %>
+          <%= form.hidden_field :idempotency_key, value: resolution_key %>
+          <%= form.hidden_field :escalation_snapshot,
+            value: ConversationEscalations::EscalationSnapshot.token_for(
+              escalation:,
+              idempotency_key: resolution_key
+            ) %>
+          <%= form.label :resolution_note, "Resolution", class: "app-field-label" %>
+          <%= form.text_field :resolution_note,
+            required: true,
+            maxlength: 4_000,
+            class: "app-input" %>
+          <%= form.submit "Resolve escalation", class: "app-secondary-button" %>
+        <% end %>
+      <% else %>
+        <p class="app-card__description">
+          Resolved by <%= escalation.resolved_by_user&.name || "a former account user" %>
+          at <%= l(escalation.resolved_at, format: :short) %>.
+          <%= escalation.resolution_note %>
+        </p>
+        <% reopening_key = SecureRandom.uuid %>
+        <%= form_with url: conversation_escalation_reopening_path(
+          conversation,
+          escalation
+        ), scope: :reopening do |form| %>
+          <%= form.hidden_field :idempotency_key, value: reopening_key %>
+          <%= form.hidden_field :escalation_snapshot,
+            value: ConversationEscalations::EscalationSnapshot.token_for(
+              escalation:,
+              idempotency_key: reopening_key
+            ) %>
+          <%= form.submit "Reopen escalation", class: "app-secondary-button" %>
+        <% end %>
+      <% end %>
+    </article>
+  <% end %>
+
+  <details>
+    <summary>Open an escalation</summary>
+    <%= form_with url: conversation_escalations_path(
+      conversation
+    ), scope: :escalation do |form| %>
+      <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+      <%= form.label :category, "Category", class: "app-field-label" %>
+      <%= form.select :category,
+        ConversationEscalation::CATEGORIES.keys.map { |category| [ category.to_s.humanize, category ] },
+        {},
+        class: "app-select" %>
+      <%= form.label :priority, "Priority", class: "app-field-label" %>
+      <%= form.select :priority,
+        ConversationEscalation::PRIORITIES.keys.map { |priority| [ priority.to_s.humanize, priority ] },
+        {},
+        class: "app-select" %>
+      <%= form.label :summary, "Summary", class: "app-field-label" %>
+      <%= form.text_field :summary, required: true, maxlength: 2_000, class: "app-input" %>
+      <%= form.label :details, "Details (optional)", class: "app-field-label" %>
+      <%= form.text_area :details, maxlength: 4_000, rows: 3, class: "app-textarea" %>
+      <%= form.submit "Open escalation", class: "app-secondary-button" %>
+    <% end %>
+  </details>
+</section>

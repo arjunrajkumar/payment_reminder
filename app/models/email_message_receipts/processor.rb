@@ -71,6 +71,23 @@ class EmailMessageReceipts::Processor
         )
       end
 
+      if ConversationMessages::EmailRecorder.app_created_delivery_for(
+        account: receipt.account,
+        parsed_message:,
+        direction:,
+        provider_account_id: receipt.provider_account_id
+      )
+        return ConversationMessages::EmailRecorder.call(
+          account: receipt.account,
+          receipt:,
+          parsed_message:,
+          direction:,
+          match: nil,
+          job_id:,
+          provider_account_id: receipt.provider_account_id
+        )
+      end
+
       match = ConversationMessages::EmailMatcher.call(
         account: receipt.account,
         provider_account_id: receipt.provider_account_id,

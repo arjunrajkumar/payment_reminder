@@ -46,6 +46,39 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     end
   end
 
+  test "a sent-job replay repairs missing notifications without resending the reminder" do
+    subscribe_to(:invoice_reminder)
+    reminder = create_reminder(
+      category: :pre_due,
+      day_offset: 7,
+      stage_key: "pre_due_7",
+      status: :sent,
+      sent_at: Time.current
+    )
+    reminder.update!(terminal_at_delivery: false)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    assert_emails 1 do
+      InvoiceReminders::SendJob.perform_now(
+        @invoice.id,
+        "pre_due",
+        7,
+        "friendly"
+      )
+    end
+    assert_predicate reminder.notification_deliveries.sole,
+      :status_delivered?
+
+    assert_no_emails do
+      InvoiceReminders::SendJob.perform_now(
+        @invoice.id,
+        "pre_due",
+        7,
+        "friendly"
+      )
+    end
+  end
+
   test "creates a sent receipt after sending the email" do
     sent_at = Time.zone.local(2026, 7, 24, 12)
 
@@ -739,6 +772,156 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_nil reminder.failure_reason
   end
 
+  test "a retry-safe provider error relinquishes the claim and the retry sends" do
+    attempts = sequence("reminder-retry-safe-provider-error")
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver)
+      .in_sequence(attempts)
+      .raises(EmailConnection::Errors::TemporaryDeliveryError, "rate limited")
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver)
+      .in_sequence(attempts)
+      .returns(@delivery_result)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      perform_enqueued_jobs(only: InvoiceReminders::SendJob) do
+        InvoiceReminders::SendJob.perform_later(
+          @invoice.id,
+          "pre_due",
+          7,
+          "friendly"
+        )
+      end
+    end
+
+    message = @invoice.invoice_reminders
+      .find_by!(stage_key: "pre_due_7")
+      .conversation_message
+    assert_predicate message, :status_sent?
+    assert_equal "gmail-message-123", message.provider_message_id
+  end
+
+  test "preflight cleanup preserves uncertainty after a claimed delivery" do
+    job = InvoiceReminders::SendJob.new(
+      @invoice.id,
+      "pre_due",
+      7,
+      "friendly"
+    )
+    reminder = nil
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      reservation = InvoiceReminders::DeliveryReservation.call(
+        invoice: @invoice,
+        category: :pre_due,
+        day_offset: 7,
+        delivery_job_id: job.job_id
+      )
+      reminder = reservation.reminder
+      assert_predicate InvoiceReminders::FinalDeliveryClaim.call(
+        invoice: @invoice,
+        reminder:,
+        delivery_job_id: job.job_id
+      ), :claimed?
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :manual,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "hold-after-reminder-provider-claim"
+      )
+      job.perform_now
+    end
+
+    message = reminder.conversation_message.reload
+    assert_predicate message, :status_failed?
+    assert_predicate message, :delivery_uncertain?
+    assert_includes @invoice.conversation_messages
+      .successful_outbound
+      .sent_after(1.hour.ago), message
+  end
+
+  test "invoice state cleanup preserves uncertainty after a claimed delivery" do
+    job = InvoiceReminders::SendJob.new(
+      @invoice.id,
+      "pre_due",
+      7,
+      "friendly"
+    )
+    reminder = nil
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      reservation = InvoiceReminders::DeliveryReservation.call(
+        invoice: @invoice,
+        category: :pre_due,
+        day_offset: 7,
+        delivery_job_id: job.job_id
+      )
+      reminder = reservation.reminder
+      assert_predicate InvoiceReminders::FinalDeliveryClaim.call(
+        invoice: @invoice,
+        reminder:,
+        delivery_job_id: job.job_id
+      ), :claimed?
+      @invoice.update!(status: :paid)
+
+      job.perform_now
+    end
+
+    message = reminder.conversation_message.reload
+    assert_predicate message, :status_failed?
+    assert_predicate message, :delivery_uncertain?
+  end
+
+  test "exhausted cleanup distinguishes claimed from definitely unsent delivery" do
+    claimed_job = InvoiceReminders::SendJob.new(
+      @invoice.id,
+      "pre_due",
+      7,
+      "friendly"
+    )
+    claimed = create_reminder(
+      category: :pre_due,
+      day_offset: 7,
+      stage_key: "pre_due_7",
+      status: :pending,
+      delivery_job_id: claimed_job.job_id
+    )
+    claimed.conversation_message.update!(
+      provider_delivery_started_at: Time.current
+    )
+    assert claimed_job.send(
+      :record_exhausted_pending_failure,
+      StandardError.new("claimed exhausted")
+    )
+    assert_predicate claimed.conversation_message.reload, :delivery_uncertain?
+
+    other_invoice = create_stripe_invoice
+    unsent_job = InvoiceReminders::SendJob.new(
+      other_invoice.id,
+      "pre_due",
+      7,
+      "friendly"
+    )
+    unsent = other_invoice.invoice_reminders.create!(
+      account: other_invoice.account,
+      category: :pre_due,
+      day_offset: 7,
+      stage_key: "pre_due_7",
+      tone: :friendly,
+      conversation_message: other_invoice.conversation_messages.create!(
+        account: other_invoice.account,
+        conversation: Conversation.for_invoice!(invoice: other_invoice),
+        direction: :outbound,
+        kind: :scheduled_reminder,
+        status: :pending,
+        delivery_job_id: unsent_job.job_id,
+        delivery_attempted_at: Time.current
+      )
+    )
+    assert unsent_job.send(
+      :record_exhausted_pending_failure,
+      StandardError.new("unsent exhausted")
+    )
+    assert_not_predicate unsent.conversation_message.reload, :delivery_uncertain?
+  end
+
   test "a temporary-delivery retry reuses its pending message and reminder" do
     job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
     reminder = create_reminder(
@@ -820,6 +1003,34 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       suppression = @invoice.invoice_reminder_suppressions.find_by!(stage_key: "pre_due_7")
       assert_predicate suppression, :reason_active_payment_promise?
     end
+  end
+
+  test "does not refresh or send a queued reminder after a collection hold is placed" do
+    InvoiceReminders::InvoiceFreshnessCheck.expects(:call).never
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(
+        @invoice.id,
+        "pre_due",
+        7,
+        "friendly"
+      )
+      CollectionHolds::Placement.call(
+        conversation: Conversation.for_invoice!(invoice: @invoice),
+        reason: :manual,
+        placed_by_kind: :user,
+        placed_by_user: users(:arjun),
+        idempotency_key: "queued-reminder-hold"
+      )
+
+      perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+    end
+
+    suppression = @invoice.invoice_reminder_suppressions.find_by!(
+      stage_key: "pre_due_7"
+    )
+    assert_predicate suppression, :reason_active_collection_hold?
   end
 
   test "does not send a stage that was already suppressed" do
@@ -930,7 +1141,10 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
 
     def subscribe_to(*events)
       user = users(:arjun)
-      user.update!(identity: Identity.create!(email_address: "notifications@example.com"))
+      user.update!(
+        identity: Identity.create!(email_address: "notifications@example.com"),
+        verified_at: Time.current
+      )
       events.each do |event|
         user.notification_subscriptions.create!(event:, email: true)
       end

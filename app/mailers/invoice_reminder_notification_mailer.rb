@@ -1,17 +1,20 @@
 class InvoiceReminderNotificationMailer < ApplicationMailer
-  def reminder_sent(user, invoice, reminder, terminal: false)
+  def reminder_sent(user, invoice, reminder, terminal: false, recipient_email: nil)
     prepare_notification(user, invoice, reminder)
     @terminal = terminal
 
-    mail to: @user.identity.email_address, subject: reminder_subject
+    mail(
+      to: recipient_email || @user.identity.email_address,
+      subject: reminder_subject
+    )
   end
 
-  def manual_follow_up(user, invoice, reminder)
+  def manual_follow_up(user, invoice, reminder, recipient_email: nil)
     prepare_notification(user, invoice, reminder)
     @days_overdue = @reminder.day_offset
 
     mail(
-      to: @user.identity.email_address,
+      to: recipient_email || @user.identity.email_address,
       subject: "Final Reminder Sent for Invoice #{@invoice_reference} - Manual Follow-up Required"
     )
   end
